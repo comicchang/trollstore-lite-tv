@@ -14,6 +14,8 @@
 // 安全：只绑定在本机网络，命令参数做白名单校验，不接受任意路径。
 
 #import <Foundation/Foundation.h>
+#import <fcntl.h>
+#import <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -320,7 +322,6 @@ static NSData *HandleRequest(NSString *head, NSData *preBody, int fd) {
                           [NSString stringWithFormat:@"up-%llu.ipa",
                            (unsigned long long)(CFAbsoluteTimeGetCurrent() * 1000)]];
 
-        NSMutableData *body = [NSMutableData dataWithData:preBody ?: [NSData data]];
         NSString *clenKey = nil;
         for (NSString *l in lines) {
             if ([[l lowercaseString] hasPrefix:@"content-length:"]) clenKey = l;
@@ -328,16 +329,35 @@ static NSData *HandleRequest(NSString *head, NSData *preBody, int fd) {
         NSUInteger want = clenKey ? (NSUInteger)[[clenKey substringFromIndex:15]
                                   stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]].integerValue : 0;
 
-        uint8_t buf[65536];
-        while (body.length < want) {
-            ssize_t n = read(fd, buf, sizeof(buf));
-            if (n <= 0) break;
-            [body appendBytes:buf length:(NSUInteger)n];
+        // 边收边写：以前把整个 ipa 收进 NSMutableData，大包（Kodi 200MB+）会撞上
+        // 本进程的 jetsam 内存上限被系统杀掉（JETSAM_REASON_MEMORY_PERPROCESSLIMIT）。
+        int wfd = open([dest fileSystemRepresentation], O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        if (wfd < 0) {
+            return HttpResponse(500, @"text/plain", [@"无法创建临时文件" dataUsingEncoding:NSUTF8StringEncoding]);
         }
-        if (body.length == 0) {
+        NSUInteger got = 0;
+        uint8_t buf[65536];
+        if (preBody.length > 0) {
+            write(wfd, preBody.bytes, preBody.length);
+            got = preBody.length;
+        }
+        while (got < want) {
+            size_t room = sizeof(buf);
+            if (want - got < room) room = want - got;
+            ssize_t n = read(fd, buf, room);
+            if (n <= 0) break;
+            if (write(wfd, buf, (size_t)n) != n) break;
+            got += (NSUInteger)n;
+        }
+        close(wfd);
+        if (got == 0) {
+            [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
             return HttpResponse(400, @"text/plain", [@"空请求体" dataUsingEncoding:NSUTF8StringEncoding]);
         }
-        [body writeToFile:dest atomically:YES];
+        if (want > 0 && got < want) {
+            [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
+            return HttpResponse(400, @"text/plain", [@"上传不完整" dataUsingEncoding:NSUTF8StringEncoding]);
+        }
 
         int rc = 0;
         NSString *out = ATDaemon([NSString stringWithFormat:@"install %@", dest], &rc);

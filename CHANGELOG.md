@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.5 — 2026-11-23
+
+**修复：网页商店被系统内存上限杀掉**
+
+- 根因：`/api/install` 把整个上传体收进 `NSMutableData` 再落盘，大包（Kodi 这类 200MB+）
+  直接撞上本进程的 jetsam 上限，日志显示 `JETSAM_REASON_MEMORY_PERPROCESSLIMIT`；
+  又因为 plist 是 `KeepAlive=false`，挂了就不再起来——表现为网页突然打不开
+- 修复 1：上传改为**边收边写盘**（64KB 缓冲，`open/write`），内存占用与包大小无关
+- 修复 2：网页服务的 plist 改为 `KeepAlive=true` + `ThrottleInterval=10`，被杀后自动恢复
+- 补：上传不完整（`Content-Length` 未读满）时删除半截文件并返回 400
+
 ## 2.0.4 — 2026-11-23
 
 **可维护性：测试与 CI**

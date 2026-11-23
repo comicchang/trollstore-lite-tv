@@ -15,8 +15,9 @@
 	<string>Background</string>
 	<key>RunAtLoad</key>
 	<true/>
+	<!-- 网页服务被杀（如 jetsam 内存超限）后要能自动回来；间隔由 ThrottleInterval 控制 -->
 	<key>KeepAlive</key>
-	<false/>
+	<true/>
 	<key>ThrottleInterval</key>
 	<integer>30</integer>
 	<key>StandardOutPath</key>
