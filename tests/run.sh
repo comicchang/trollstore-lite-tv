@@ -45,8 +45,17 @@ if command -v plutil >/dev/null 2>&1; then
     [ -f "$f" ] || continue
     if plutil -lint "$f" >/dev/null 2>&1; then ok "plist $(basename "$f")"; else bad "plist $(basename "$f")"; fi
   done
+elif command -v python3 >/dev/null 2>&1; then
+  for f in "$ROOT"/src/daemon/*.plist "$ROOT"/src/gui/Info.plist "$ROOT"/examples/hello-tvos/Info.plist; do
+    [ -f "$f" ] || continue
+    if python3 -c 'import plistlib,sys; plistlib.load(open(sys.argv[1],"rb"))' "$f" 2>/dev/null; then
+      ok "plist $(basename "$f")"
+    else
+      bad "plist $(basename "$f")"
+    fi
+  done
 else
-  ok "跳过 plist 校验（无 plutil）"
+  ok "跳过 plist 校验（无 plutil / python3）"
 fi
 
 # ---------------------------------------------------------------- 3. 用法与参数

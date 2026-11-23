@@ -47,7 +47,12 @@ CI 的 `package` job 用的就是这条路径（`--root-owner-group` 保证包�
 ## 发布新版本
 
 ```sh
-ATV_IP=192.168.1.23 ATV_PASS='<设备sudo密码>' ./scripts/publish-release.sh v2.0.3
+# 有设备：直接在设备上打包并上传
+ATV_IP=192.168.1.23 ATV_PASS='<设备sudo密码>' ./scripts/publish-release.sh v2.0.4
+
+# 没设备：本地出包，再手工上传
+./scripts/build-deb-local.sh && ./examples/hello-tvos/build.sh
+gh release create v2.0.4 dist/*.deb dist/TSLTVDemo-unsigned.ipa --generate-notes
 ```
 
 它会：

@@ -27,12 +27,17 @@ ATV_PASS='<设备sudo密码>' ./scripts/accept.sh 192.168.1.23     # 七步，�
 
 ## CI（.github/workflows/ci.yml）
 
-| Job | 内容 |
-|---|---|
-| `lint` | shellcheck（warning 即失败）、可执行位、CRLF 检查 |
-| `test` | macOS + tvOS SDK，跑 `tests/run.sh` |
-| `package` | `brew install dpkg` 后用 `scripts/build-deb-local.sh` 出 `.deb`，校验包内容 |
-| `release` | 打 tag（`v*`）时自动创建 Release 并上传 deb + demo ipa |
+| Job | 运行环境 | 内容 | 是否阻塞 |
+|---|---|---|---|
+| `lint` | ubuntu | shellcheck（warning 即失败）、可执行位、CRLF | 是 |
+| `test` | ubuntu | `tests/run.sh`（SDK 相关项自动跳过） | 是 |
+| `test-macos` | macos-14 | 完整测试（含 Mach-O 解析、demo ipa） | 否 |
+| `package` | macos-14 | `brew install dpkg` + `build-deb-local.sh`，校验包内容 | 否 |
+
+> macOS runner 需要账号有可用的 macOS 分钟，否则 job 会被取消（表现为 `cancelled`）。
+> 因此 CI 的**结论由 ubuntu 上的 lint + test 决定**；macOS 两个 job 标了
+> `continue-on-error`，本地用 `./scripts/build-deb-local.sh` 出包等价。
+> **发布**不用 CI 的 macOS runner，走本地一条命令：`./scripts/publish-release.sh`。
 
 ## verify.sh —— 环境与信任链
 
