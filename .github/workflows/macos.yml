@@ -1,0 +1,52 @@
+# 需要 tvOS SDK 的作业：完整测试 + 打包。
+# 手动触发，或打 tag 时触发。
+#
+# 注意：这需要账号有可用的 macOS runner 分钟；没有的话 job 会被取消。
+# 本地等价命令：./tests/run.sh && ./scripts/build-deb-local.sh
+name: macOS full
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  test-macos:
+    name: 完整测试（macOS + tvOS SDK）
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: 环境信息
+        run: |
+          xcodebuild -version || true
+          xcrun --sdk appletvos --show-sdk-path || true
+      - name: 运行测试
+        run: ./tests/run.sh -v
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: demo-ipa
+          path: dist/TSLTVDemo-unsigned.ipa
+          if-no-files-found: ignore
+
+  package:
+    name: 打包 .deb（macOS）
+    runs-on: macos-14
+    needs: [test-macos]
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 dpkg
+        run: brew install dpkg
+      - name: 构建
+        run: ./scripts/build-deb-local.sh
+      - name: 校验包内容
+        run: |
+          deb=$(ls dist/*.deb | head -1)
+          echo "产物: $deb"
+          dpkg-deb -I "$deb"
+          dpkg-deb -c "$deb" | grep -E 'tsltv$|TSLTV.app/TSLTV|\.plist' | head -10
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+          if-no-files-found: ignore
