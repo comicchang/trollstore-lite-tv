@@ -22,3 +22,15 @@ TSLTV —— tvOS 上的 TrollStore 概念实现（非官方 fork）
 如果你要分发本项目的二进制，请保留本 NOTICE 与上述版权声明。
 
 关于「为什么不能直接 fork 上游代码并在 tvOS 编译」，见同目录的 PORTING.md。
+
+---
+
+## 第三方组件与归属
+
+本项目**未包含**以下项目的源码，但运行时依赖或接口上借鉴了它们：
+
+- **TrollStore** (https://github.com/opa334/TrollStore) — MIT, Copyright (c) 2022-2026 Lars Fröder
+  借鉴其 RootHelper 子命令接口与部分概念，详见 NOTICE。本项目未复制其代码。
+  其中 `RootHelper/uicache.m` 为 CoolStar 的 BSD-4-Clause，本项目不包含该文件。
+- **Relaxin / roothide** — 越狱环境，本项目的运行前提，非本项目组成部分。
+- **ldid / uicache** — 来自 Procursus，通过 APT 安装在设备上使用，未打包进本仓库。
