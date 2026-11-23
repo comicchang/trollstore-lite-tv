@@ -32,7 +32,7 @@ Every script in this project **auto-detects** that `.jbroot-*` directory name â€
 ### Option A: one command from a Mac (recommended)
 
 ```sh
-git clone https://github.com/<you>/trollstore-lite-tv.git
+git clone https://github.com/comicchang/trollstore-lite-tv.git
 cd trollstore-lite-tv
 ATV_PASS='<device sudo password>' ./scripts/install.sh 192.168.1.23
 ```

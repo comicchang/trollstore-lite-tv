@@ -82,7 +82,7 @@ Detailed install, verification, uninstall and troubleshooting: [docs/en/INSTALL.
 
 ## What's in a Release
 
-Every [Release](releases) ships two artifacts:
+Every [release](https://github.com/comicchang/trollstore-lite-tv/releases) ships two artifacts:
 
 | File | Purpose |
 |---|---|

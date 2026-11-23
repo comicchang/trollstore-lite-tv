@@ -45,7 +45,7 @@ ldid ad-hoc 双哈希签名  →  把该二进制的 sha256 cdhash 写进内核�
 |---|---|---|
 | **电视界面** `TrollStoreLiteTV.app` | 主屏应用：列表 / 安装 / 装目录 / 校验 / 卸载 | 在沙发上用遥控器操作 |
 | **网页商店** `http://<device-ip>:8787` | 浏览器里拖 ipa 进去就装 | 从电脑上装东西 |
-| **命令行** `tsltv`（别名 `trollstore-lite`、`tsl`） | 脚本化、批量、排障 | SSH / 自动化 |
+| **命令行** `tsltv`（别名 `trollstore-lite-tv`、`tsl`） | 脚本化、批量、排障 | SSH / 自动化 |
 
 三者共用同一个特权引擎 `tsltvd`，没有第二套逻辑。
 
@@ -77,7 +77,7 @@ open http://192.168.1.23:8787     # 把 ipa 拖进去
 
 ## Release 里有什么
 
-每个 [Release](../../releases) 提供两个产物：
+每个 [Release](https://github.com/comicchang/trollstore-lite-tv/releases) 提供两个产物：
 
 | 文件 | 用途 |
 |---|---|

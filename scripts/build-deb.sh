@@ -13,7 +13,7 @@ IP="${1:-}"
 [ -n "$IP" ] || { echo "用法: $0 <设备IP>"; exit 2; }
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
-VER="${VER:-1.0.12}"
+VER="${VER:-$(cat "$ROOT/VERSION" 2>/dev/null || echo 0.0.0)}"
 ARCH=appletvos-arm64e
 DEB=trollstore-lite-tv_${VER}_${ARCH}.deb
 STAGE=$(mktemp -d)/pkg
@@ -46,7 +46,7 @@ plutil -replace CFBundleShortVersionString -string "$VER" \
 
 cat > "$STAGE/DEBIAN/control" <<EOF
 Package: trollstore-lite-tv
-Name: TrollStoreLiteTV Lite
+Name: TrollStore Lite TV
 Version: $VER
 Architecture: $ARCH
 Maintainer: TrollStoreLiteTV
@@ -101,6 +101,8 @@ mkdir -p /var/tmp/tsltv-inbox; chmod 777 /var/tmp/tsltv-inbox 2>/dev/null || tru
 for n in tsltv trollstore-lite-tv trollstore-lite-tv-cli tsl tsltv-cli; do
   ln -sf /usr/libexec/tsltv/tsltv /usr/bin/$n 2>/dev/null || true
 done
+# TrollStore RootHelper 兼容层：文档里直接写 `tsh install ...`
+ln -sf /usr/libexec/tsltv/tsh /usr/bin/tsh 2>/dev/null || true
 
 uicache -p /Applications/TrollStoreLiteTV.app >/dev/null 2>&1 || true
 
@@ -133,11 +135,14 @@ POSTINST
 
 cat > "$STAGE/DEBIAN/prerm" <<'PRERM'
 #!/bin/sh
-for job in com.trollstorelite.tvd com.trollstorelite.tv.web com.trollstorelite.tv.retrust; do
+for job in com.trollstorelite.tv.daemon com.trollstorelite.tv.web com.trollstorelite.tv.retrust; do
   launchctl bootout system/$job >/dev/null 2>&1 || true
 done
-uicache -u /Applications/TrollStoreLiteTV.app >/dev/null 2>&1 || true
-rm -f /usr/bin/tsltv /usr/bin/trollstore-lite /usr/bin/tsl 2>/dev/null || true
+uicache -u com.trollstorelite.tv >/dev/null 2>&1 || true
+# 与 postinst 创建的别名一一对应，避免卸载后残留命令
+rm -f /usr/bin/tsltv /usr/bin/trollstore-lite-tv /usr/bin/trollstore-lite-tv-cli \
+      /usr/bin/tsl /usr/bin/tsltv-cli /usr/bin/tsh 2>/dev/null || true
+rm -rf /var/run/tsltv /var/tmp/tsltv-inbox 2>/dev/null || true
 exit 0
 PRERM
 

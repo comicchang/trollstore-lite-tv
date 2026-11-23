@@ -27,12 +27,12 @@ ssh mobile@<device-ip> 'ls -d /var/containers/Bundle/Application/.jbroot-* && jb
 
 ---
 
-## 1. 安装 TSLTV Lite
+## 1. 安装 TrollStore Lite TV
 
 ### 方式 A：Mac 一条命令（推荐）
 
 ```sh
-git clone https://github.com/<you>/trollstore-lite-tv.git
+git clone https://github.com/comicchang/trollstore-lite-tv.git
 cd trollstore-lite-tv
 ATV_PASS='<设备sudo密码>' ./scripts/install.sh 192.168.1.23
 ```
@@ -148,7 +148,7 @@ sudo tsltv registration          # 每个应用注册成 System 还是 User
 sudo tsltv version               # 工具版本
 ```
 
-别名：`trollstore-lite` / `tsl` 等价于 `tsltv`。
+别名：`trollstore-lite-tv` / `tsl` 等价于 `tsltv`。
 
 TrollStore 风格调用（给熟悉上游的人）：
 

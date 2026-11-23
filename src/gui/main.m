@@ -128,6 +128,41 @@ static NSArray<ATApp *> *ATProbe(void) {
 
 #pragma mark - 主列表
 
+// 电视上必须有非常明确的焦点态：白边 + 轻微放大 + 提亮
+@interface ATFocusCell : UITableViewCell
+@property (nonatomic, strong) UIView *ring;
+@end
+
+@implementation ATFocusCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuse {
+    if ((self = [super initWithStyle:style reuseIdentifier:reuse])) {
+        self.focusStyle = UITableViewCellFocusStyleCustom;
+        _ring = [[UIView alloc] initWithFrame:CGRectZero];
+        _ring.backgroundColor = [UIColor clearColor];
+        _ring.layer.borderColor = [UIColor whiteColor].CGColor;
+        _ring.layer.borderWidth = 3;
+        _ring.layer.cornerRadius = 10;
+        _ring.hidden = YES;
+        _ring.userInteractionEnabled = NO;
+        [self.contentView addSubview:_ring];
+    }
+    return self;
+}
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    self.ring.frame = CGRectInset(self.bounds, 3, 3);
+}
+- (void)didUpdateFocusInContext:(UIFocusUpdateContext *)ctx withAnimationCoordinator:(UIFocusAnimationCoordinator *)coord {
+    [super didUpdateFocusInContext:ctx withAnimationCoordinator:coord];
+    BOOL focused = (ctx.nextFocusedView == self);
+    [coord addCoordinatedAnimations:^{
+        self.ring.hidden = !focused;
+        self.contentView.backgroundColor = [UIColor colorWithWhite:(focused ? 0.20 : 0.11) alpha:1.0];
+        self.transform = focused ? CGAffineTransformMakeScale(1.02, 1.02) : CGAffineTransformIdentity;
+    } completion:nil];
+}
+@end
+
 @interface ATListController : UITableViewController
 @property (nonatomic, strong) NSArray<ATApp *> *apps;
 @property (nonatomic, assign) BOOL didSnapshot;
@@ -327,10 +362,10 @@ static NSArray<ATApp *> *ATProbe(void) {
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip {
-    UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:@"c"];
+    ATFocusCell *cell = [tv dequeueReusableCellWithIdentifier:@"c"];
     if (!cell) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
-                                      reuseIdentifier:@"c"];
+        cell = [[ATFocusCell alloc] initWithStyle:UITableViewCellStyleSubtitle
+                                  reuseIdentifier:@"c"];
     }
     ATApp *a = self.apps[ip.row];
     cell.backgroundColor = [UIColor colorWithWhite:0.11 alpha:1.0];

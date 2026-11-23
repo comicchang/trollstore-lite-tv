@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.1 — 2026-11-24
+
+**按评审意见修的一批真问题**
+
+- **卸载不干净**：`prerm` 里的主守护进程 label 写成 `com.trollstorelite.tvd`（实际是
+  `.daemon`），停不掉；alias 删除列表与 postinst 创建的不一致，卸载后残留
+  `/usr/bin/trollstore-lite-tv`、`-cli`、`tsltv-cli`
+- **版本来源不唯一**：远程打包脚本默认 `VER=1.0.12`，现在改为读仓库 `VERSION`
+- 包显示名两条打包路径不一致（`TrollStoreLiteTV Lite` vs `TrollStore Lite TV`）→ 统一
+- **`tsh` 不在 PATH**：文档里写 `tsh install ...` 却只装了 `/usr/libexec/tsltv/tsh` → 补 `/usr/bin/tsh`
+- **签名/信任失败被静默吞掉**（`|| return 0` / `|| true`）→ 改为报错并失败
+- 电视界面：焦点态加强（白边 + 轻微放大 + 提亮），此前只差一点点背景色
+- 网页商店：应用名/版本/bundle id 全部 HTML 转义（防注入），卸载按钮改危险色 + 二次确认
+- CLI：`minOS` 判定改为完整比较（17.1 现在会提示）；删掉 `precheck_app` 里的死代码；
+  注释从 "unix socket" 改为 FIFO；状态文件字段说明补上 `origin`
+- 文档：`<you>` 占位符、`../../releases` 死链、`TSLTV Lite` 旧名、`trollstore-lite` 别名全部修正
+
 ## 2.1.0 — 2026-11-23
 
 **命名统一 / 主屏图标 / 网页商店修复 / 双语文档**

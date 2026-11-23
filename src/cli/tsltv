@@ -20,10 +20,10 @@
 #   tsltv verify [bundle-id...]  校验签名/信任/注册状态
 #   tsltv trust status           信任缓存概况
 #   tsltv trust retrust          按记账清单重放信任
-#   tsltv remote <子命令...>     经 daemon(unix socket) 执行，供 GUI/远程调用
+#   tsltv remote <子命令...>     经 daemon(/var/run/tsltv 的 FIFO) 执行，供 GUI/远程调用
 #
-# 状态文件: /usr/libexec/tsltv/installed.tsv
-#   字段: bundle_id <TAB> app_path <TAB> exe_cdhash <TAB> installed_at
+# 状态文件: /usr/libexec/tsltv/installed.tsv（5 字段）
+#   字段: bundle_id <TAB> app_path <TAB> exe_cdhash <TAB> installed_at <TAB> origin
 
 set -u
 
@@ -213,23 +213,7 @@ precheck_app() { # <appdir> <exe_name>
   say "    探测: $_out"
   precheck_verdict "$_out"
   return $?
-  case "$_out" in
-    *cryptid=0*) ;;
-  esac
-  case "$_out" in
-    *"platform=2"*)
-      say "注意: 该二进制是 iOS 平台（platform=2），在 tvOS 上 dyld 会拒绝加载系统库。"
-      say "  可用 work/minos/patch_platform.py 改成 3，但 API 兼容性自负。"
-      ;;
-  esac
-  _min=$(printf '%s' "$_out" | sed -n 's/.*minos=\([0-9]*\.\([0-9]*\)\).*/\1/p')
-  if [ -n "$_min" ]; then
-    _major=${_min%%.*}
-    if [ "${_major:-0}" -gt 17 ] 2>/dev/null; then
-      say "注意: 该包要求 tvOS ${_min}，高于本机 17.0，可能无法启动。"
-    fi
-  fi
-  return 0
+
 }
 
 # 纯 shell 解析 Mach-O 头（不依赖 machocheck，规避 vroot 造成的路径不可见）
@@ -315,9 +299,13 @@ precheck_verdict() { # "<platform=N minos=X.Y cryptid=Z>"
     say "注意: 该二进制是 iOS 平台（platform=2），在 tvOS 上 dyld 会拒绝加载系统库。"
     say "  可改 platform 为 3，但 API 兼容性自负。"
   fi
-  _major=${_minos%%.*}
-  if [ -n "${_major:-}" ] && [ "${_major:-0}" -gt 17 ] 2>/dev/null; then
-    say "注意: 该包要求 tvOS ${_minos}，高于本机 17.0，可能无法启动。"
+  # 本机是 17.0；只要包的 minOS 高于 17.0（含 17.1）就提示
+  if [ -n "${_minos:-}" ] && [ "$_minos" != "17.0" ]; then
+    _ma=${_minos%%.*}; _mi=${_minos#*.}
+    if [ "${_ma:-0}" -gt 17 ] 2>/dev/null || \
+       { [ "${_ma:-0}" -eq 17 ] && [ "${_mi:-0}" -gt 0 ] 2>/dev/null; }; then
+      say "注意: 该包要求 tvOS ${_minos}，高于本机 17.0，可能无法启动。"
+    fi
   fi
   return 0
 }
@@ -660,6 +648,11 @@ cmd_install_url() {
 # ---------- 入口 ----------
 
 if [ "${TrollStoreLiteTV_LIB_ONLY:-0}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
+fi
+
+# 供单元测试使用：TSLTV_LIB_ONLY=1 时只定义函数，不执行任何命令
+if [ "${TSLTV_LIB_ONLY:-0}" = "1" ]; then
   return 0 2>/dev/null || exit 0
 fi
 

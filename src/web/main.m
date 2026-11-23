@@ -117,6 +117,16 @@ static NSString *ATDaemon(NSString *command, int *rcOut) {
     return ATDaemonTimeout(command, 180, rcOut);   // 大 ipa 安装可能要几十秒
 }
 
+static NSString *Esc(NSString *s) {
+    if (!s) return @"";
+    NSString *r = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
+    r = [r stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+    r = [r stringByReplacingOccurrencesOfString:@">" withString:@"&gt;"];
+    r = [r stringByReplacingOccurrencesOfString:@"\"" withString:@"&quot;"];
+    r = [r stringByReplacingOccurrencesOfString:@"'" withString:@"&#39;"];
+    return r;
+}
+
 static NSString *UrlDecode(NSString *s) {
     return [s stringByRemovingPercentEncoding] ?: s;
 }
@@ -239,11 +249,11 @@ static NSString *PageHTML(void) {
             @"<tr><td class=bid>%@</td><td class=dim>%@</td>"
              "<td class=%@>%@</td><td class=%@>%@</td><td class=dim>%@</td>"
              "<td class=mono>%@…</td>"
-             "<td><button onclick=\"act('uninstall','%@')\">卸载</button></td></tr>",
-            f.count > 6 ? f[6] : f[0], f.count > 7 ? f[7] : @"-",
+             "<td><button class=del onclick=\"act('uninstall','%@')\">卸载</button></td></tr>",
+            Esc(f.count > 6 ? f[6] : f[0]), Esc(f.count > 7 ? f[7] : @"-"),
             trusted ? @"ok" : @"bad", trusted ? @"✓" : @"✗",
             reg ? @"ok" : @"bad", reg ? @"✓" : @"✗",
-            f.count > 5 ? f[5] : @"-", short_, f[0]];
+            Esc(f.count > 5 ? f[5] : @"-"), Esc(short_), Esc(f[0])];
     }
 
     // 用 NSMutableString 拼接：之前整页走一个超长 stringWithFormat，
@@ -263,6 +273,7 @@ static NSString *PageHTML(void) {
         ".ok{color:#39d353}.bad{color:#f0883e}"
         "button{background:#1f6feb;border:0;color:#fff;padding:6px 12px;border-radius:7px;"
         "cursor:pointer;font-size:13px}button:hover{filter:brightness(1.15)}"
+        "button.del{background:#8b2c2c}button.del:hover{background:#a83232}"
         "#drop{border:1px dashed #30363d;border-radius:12px;padding:22px;text-align:center;"
         "margin:22px 0;color:#8b8b93}#drop.hot{border-color:#1f6feb;color:#e8e8ea}"
         "#log{white-space:pre-wrap;background:#111114;border:1px solid #1e1e22;border-radius:10px;"
@@ -285,7 +296,9 @@ static NSString *PageHTML(void) {
     [h appendFormat:@"<div id=log>就绪。已安装 %lu 个应用。</div>", (unsigned long)count];
     [h appendString:@"<script>"
         "const log=(t)=>{document.getElementById('log').textContent=t};"
-        "async function act(cmd,arg){log('执行 '+cmd+(arg?' '+arg:'')+' …');"
+        "async function act(cmd,arg){"
+        "if(cmd==='uninstall'&&!confirm('确定卸载 '+(arg||'')+' ?'))return;"
+        "log('执行 '+cmd+(arg?' '+arg:'')+' …');"
         "const r=await fetch('/api/'+cmd+(arg?'?bid='+encodeURIComponent(arg):'')+'',{method:'POST'});"
         "log(await r.text());setTimeout(()=>location.reload(),1200)}"
         "async function selfUpd(){"
