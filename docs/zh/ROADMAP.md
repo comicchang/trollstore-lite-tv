@@ -104,7 +104,7 @@ GUI 不直接做签名，只调 `tsltv remote <子命令…>`，逻辑与 CLI �
 | 检查 | 结果 |
 |---|---|
 | 编译 | 通过，`platform 3` / `minos 17.0` |
-| 安装 + 注册 | `com.trollstorelite.tv.app` 已进 uicache |
+| 安装 + 注册 | `com.trollstorelite.tv` 已进 uicache |
 | dyld 预检 | 加载 **441** 个 dylib，零 `Library not loaded` / `Symbol not found` |
 | 应用内 IPC 自检（`TSLTV_SELFTEST=1`） | `probe` 返回 6 条、`verify` 全 PASS —— **GUI 自己的代码真的跑通了** |
 
@@ -131,7 +131,7 @@ Consumer/Play-Pause(0x0C/0xCD) 按键后，`uiopen` 立刻恢复工作：
 
 ```
 已派发 HID 事件 page=0xC usage=0xCD
-uiopen --bundleid com.trollstorelite.tv.app   →  rc=0
+uiopen --bundleid com.trollstorelite.tv   →  rc=0
 ps: 92267  1  00:24  0:00.25  .../TrollStoreLiteTV.app/TSLTV     ← PPID=1，活着
 daemon log: 05:59:47 exec [...] probe   ← GUI 自己在取数据
 ```
