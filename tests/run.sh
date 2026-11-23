@@ -116,7 +116,7 @@ fi
 group "demo ipa 产物"
 if [ -d "$SDK" ]; then
   if sh "$ROOT/examples/hello-tvos/build.sh" >/dev/null 2>&1; then
-    IPA="$ROOT/dist/TrollStoreLiteTVDemo-unsigned.ipa"
+    IPA="$ROOT/dist/TSLTVDemo-unsigned.ipa"
     if [ -f "$IPA" ]; then
       ok "生成 $(basename "$IPA")"
       listing=$(unzip -l "$IPA" 2>/dev/null | awk '{print $4}')

@@ -1,5 +1,7 @@
 [中文](README.md) · English
 
+<img src="docs/images/icon.png" width="360" alt="icon">
+
 # TrollStore Lite TV
 
 **Install and run any unencrypted tvOS app on a jailbroken Apple TV** — no Apple developer

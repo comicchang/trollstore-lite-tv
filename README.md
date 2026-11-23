@@ -1,3 +1,5 @@
+<img src="docs/images/icon.png" width="360" alt="图标">
+
 # TrollStore Lite TV
 
 [English](README.en.md) · **中文**
