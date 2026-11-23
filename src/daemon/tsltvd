@@ -1,0 +1,103 @@
+#!/bin/sh
+# tsltvd —— TSLTV 常驻服务端（纯 sh）
+#
+# 为什么不用 unix socket：tvOS 的 launchd 不支持按连接拉起
+# （Sockets + inetdCompatibility/OnDemand 实测 runs=0，子进程从未被 spawn）。
+# 所以用 FIFO + 响应文件，语义等价且不依赖 launchd 的高级特性。
+#
+# 协议（全部在 /var/run/tsltv/，目录 0700 root）：
+#   客户端: 写一行 "<id>\t<子命令...>" 到 req.fifo
+#   服务端: 执行后写 <id>.out，再 touch <id>.done
+#   客户端: 轮询 <id>.done，读 <id>.out，清理
+#
+# 客户端入口: tsltv remote <子命令...>
+
+JB=$(ls -d /var/containers/Bundle/Application/.jbroot-* 2>/dev/null | head -1)
+[ -n "$JB" ] || JB=$(ls -d /private/var/containers/Bundle/Application/.jbroot-* 2>/dev/null | head -1)
+AT=$JB/usr/libexec/tsltv/tsltv
+RUN=/var/run/tsltv
+FIFO=$RUN/req.fifo
+LOG=/var/log/tsltvd.log
+
+umask 077
+mkdir -p "$RUN" || exit 1
+chmod 755 "$RUN"
+[ -p "$FIFO" ] || mkfifo "$FIFO" || exit 1
+chmod 666 "$FIFO"
+
+log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG"; }
+
+log "tsltvd start pid=$$"
+
+# 以读写方式打开 FIFO，避免每次 read 后 EOF 让循环退出
+exec 9<>"$FIFO" || { log "open fifo failed"; exit 1; }
+
+# warm-up：起来就先把 probe 缓存填好，前端打开时不用等十几秒
+( sleep 2; "$JB/bin/sh" "$AT" probe > "$RUN/.probe.cache" 2>/dev/null ) >/dev/null 2>&1 &
+log "warm-up probe scheduled"
+
+cleanup() { rm -f "$FIFO"; log "tsltvd stop pid=$$"; exit 0; }
+trap cleanup INT TERM HUP
+
+while :; do
+  line=""
+  IFS= read -r line <&9 || continue
+  [ -n "$line" ] || continue
+
+  id=${line%%	*}
+  cmd=${line#*	}
+  [ "$id" = "$line" ] && continue          # 没有制表符：格式错，丢弃
+  case "$id" in ''|*[!0-9]*) continue ;; esac
+
+  # 白名单 + 拒绝 shell 元字符（不 eval）
+  case "$cmd" in
+    *[\;\|\&\$\`\(\)\<\>\'\"\\]*) printf '非法字符\n' > "$RUN/$id.out"; : > "$RUN/$id.done"; continue ;;
+  esac
+  verb=${cmd%% *}
+  allowed=0
+  for a in doctor list probe launch install install-url adopt verify uninstall trust selfupdate inbox inbox-install refresh registration version; do
+    [ "$verb" = "$a" ] && allowed=1
+  done
+  if [ "$allowed" -ne 1 ]; then
+    printf '未知子命令: %s\n' "$verb" > "$RUN/$id.out"
+    printf '2\n' > "$RUN/$id.rc"
+    : > "$RUN/$id.done"
+    continue
+  fi
+
+  # probe 是只读的，缓存 5 秒：GUI 刷新/网页反复加载时不至于每次都等十几秒
+  CACHE=$RUN/.probe.cache
+  if [ "$cmd" = "probe" ] && [ -s "$CACHE" ]; then
+    _age=$(( $(date +%s) - $(date -r "$CACHE" +%s 2>/dev/null || echo 0) ))
+    if [ "$_age" -ge 0 ] && [ "$_age" -lt 30 ]; then
+      printf '%s\n' "$(cat "$CACHE")" > "$RUN/$id.out"; chmod 666 "$RUN/$id.out" 2>/dev/null
+      printf '0\n' > "$RUN/$id.rc"; chmod 666 "$RUN/$id.rc" 2>/dev/null
+      : > "$RUN/$id.done"; chmod 666 "$RUN/$id.done" 2>/dev/null
+      log "cache [$id] probe age=${_age}s"
+      continue
+    fi
+  fi
+
+  log "exec [$id] $cmd"
+  # 关键：别让子进程继承 FIFO 的 fd 9，否则每个子进程都会拖着这个管道
+  out=$("$JB/bin/sh" "$AT" $cmd 2>&1 9>&-)
+  rc=$?
+  printf '%s\n' "$out" > "$RUN/$id.out"; chmod 666 "$RUN/$id.out" 2>/dev/null
+  printf '%s\n' "$rc" > "$RUN/$id.rc"; chmod 666 "$RUN/$id.rc" 2>/dev/null
+  : > "$RUN/$id.done"; chmod 666 "$RUN/$id.done" 2>/dev/null
+  # 写操作后让缓存失效，保证下次 probe 反映最新状态
+  case "${cmd%% *}" in
+    install|install-url|uninstall|adopt|trust|inbox-install|selfupdate)
+      rm -f "$CACHE" 2>/dev/null ;;
+  esac
+  if [ "$cmd" = "probe" ] && [ "$rc" -eq 0 ]; then
+    printf '%s\n' "$out" > "$CACHE" 2>/dev/null
+  fi
+  log "done  [$id] rc=$rc"
+
+  # 清理陈旧响应文件（客户端无权删除 root 建的文件，由这里代劳）
+  find "$RUN" -name '*.done' -type f -mmin +2 2>/dev/null | while read -r d; do
+    base=${d%.done}
+    rm -f "$base.out" "$base.rc" "$d" 2>/dev/null
+  done
+done

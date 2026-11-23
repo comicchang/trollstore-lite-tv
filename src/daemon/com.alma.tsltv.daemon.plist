@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.alma.tsltv.daemon</string>
+
+	<!-- 与可用的 com.alma.retrust 同形：显式用 sh 执行脚本 -->
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>/usr/libexec/tsltv/tsltvd</string>
+	</array>
+
+	<key>UserName</key>
+	<string>root</string>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<false/>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+
+	<key>StandardOutPath</key>
+	<string>/var/log/tsltvd.out</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/tsltvd.err</string>
+</dict>
+</plist>

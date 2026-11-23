@@ -1,0 +1,90 @@
+#!/bin/sh
+# tsh —— TrollStore RootHelper 的 tvOS 等价实现
+#
+# TrollStore 的 app 只是壳，真正干活的是 RootHelper（一个 root 二进制），
+# 由 app 以 `<rootHelper> install [force] [custom|installd] <ipa>` 形式调用。
+# 在 tvOS 上 RootHelper 编译不过（SDK 禁用 posix_spawn 系列、MCMAppContainer 不存在），
+# 但它的**接口**可以原样保留：这个脚本就是那个接口，底层换成 TSLTV 的
+# 「ad-hoc 签名 + 内核信任缓存」机制。
+#
+# 用法（与 TrollStore RootHelper 对齐）：
+#   tsh install [force] [custom|installd] <ipa|tipa|app>
+#   tsh uninstall <bundle-id>
+#   tsh refresh
+#   tsh refresh-all
+#   tsh registration <bundle-id> [System|User]
+#   tsh trust-retrust
+#
+# 退出码与 TrollStore 对齐：0 成功；非 0 失败（具体码见下方映射）。
+
+AT=/usr/libexec/tsltv/tsltv
+RUN_AS=""
+
+say() { printf '%s\n' "$*"; }
+
+usage() {
+  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  exit 1
+}
+
+cmd=${1:-}
+[ -n "$cmd" ] || usage
+shift 2>/dev/null || true
+
+case "$cmd" in
+  install)
+    # 吃掉 TrollStore 的修饰参数
+    while :; do
+      case "${1:-}" in
+        force|custom|installd) RUN_AS="$RUN_AS $1"; shift ;;
+        *) break ;;
+      esac
+    done
+    src=${1:-}
+    [ -n "$src" ] || { say "install: 缺少 ipa 路径"; exit 2; }
+    [ -e "$src" ] || { say "install: 找不到 $src"; exit 2; }
+    # 记录调用方式，便于对照 TrollStore 的行为
+    say "[tsh] TrollStore 兼容安装 (args:${RUN_AS:- default})"
+    "$AT" install "$src"
+    rc=$?
+    # TrollStore: 171 = 可恢复错误（可 force 重试）；这里把失败映射为 1
+    [ "$rc" -eq 0 ] || exit 1
+    exit 0
+    ;;
+
+  uninstall)
+    bid=${1:-}
+    [ -n "$bid" ] || { say "uninstall: 缺少 bundle id"; exit 2; }
+    "$AT" uninstall "$bid"
+    exit $?
+    ;;
+
+  refresh)
+    "$AT" refresh
+    exit $?
+    ;;
+
+  refresh-all)
+    "$AT" refresh --all
+    exit $?
+    ;;
+
+  registration)
+    bid=${1:-}
+    [ -n "$bid" ] || { say "registration: 缺少 bundle id"; exit 2; }
+    # TrollStore 的 modify-registration 会改写注册类型；tvOS 的 uicache 只能查，
+    # 改写需要 -s（仅对 /var/containers 下的应用有意义），这里先只读。
+    "$AT" registration "$bid"
+    exit $?
+    ;;
+
+  trust-retrust)
+    "$AT" trust retrust
+    exit $?
+    ;;
+
+  *)
+    say "tsh: 未知子命令 $cmd"
+    usage
+    ;;
+esac

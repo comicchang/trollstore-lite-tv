@@ -1,0 +1,15 @@
+# 构建产物
+src/web/tsltvweb
+src/tools/wake
+src/tools/machocheck
+src/gui/TSLTV.app/
+examples/hello-tvos/.build/
+
+# 发行产物（用 scripts/build-deb.sh 生成；如需入库请显式 git add -f）
+dist/*.deb
+dist/*.ipa
+dist/*.tar.gz
+
+# 系统垃圾
+.DS_Store
+*.swp

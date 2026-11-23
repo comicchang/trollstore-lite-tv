@@ -1,0 +1,688 @@
+#!/bin/sh
+# tsltv —— tvOS 上的 TrollStore 等效 CLI（root 运行）
+# 别名: trollstore-lite / tsl
+#
+# 子命令:
+#   tsltv doctor                 环境自检
+#   tsltv list                   已由本工具安装的应用
+#   tsltv install <ipa|app>      安装（解包 -> 签名 -> 信任 -> 注册 -> 记账）
+#   tsltv install-url <url>      从直链下载 ipa 并安装
+#   tsltv uninstall <bundle-id>  卸载（只允许卸载本工具装过的）
+#   tsltv launch <bundle-id>     启动已安装应用
+#   tsltv selfupdate <deb-url>   用商店升级自身（下载 deb 交给 dpkg）
+#   tsltv version                打印工具版本
+#   tsltv refresh [--all]        重新注册已装应用
+#   tsltv registration [bid]     查看注册类型（System/User）
+#   tsltv inbox                  列出投递目录里的 ipa
+#   tsltv inbox-install          安装投递目录里的全部 ipa
+#   tsltv probe                  机器可读状态（GUI 用，TSV）
+#   tsltv adopt <app|bid|--all>  把已有安装纳入管理清单
+#   tsltv verify [bundle-id...]  校验签名/信任/注册状态
+#   tsltv trust status           信任缓存概况
+#   tsltv trust retrust          按记账清单重放信任
+#   tsltv remote <子命令...>     经 daemon(unix socket) 执行，供 GUI/远程调用
+#
+# 状态文件: /usr/libexec/tsltv/installed.tsv
+#   字段: bundle_id <TAB> app_path <TAB> exe_cdhash <TAB> installed_at
+
+set -u
+
+# jbroot 路径按设备不同（roothide 的目录名带哈希），运行时自动探测
+JB=$(ls -d /var/containers/Bundle/Application/.jbroot-* 2>/dev/null | head -1)
+[ -n "$JB" ] || JB=$(ls -d /private/var/containers/Bundle/Application/.jbroot-* 2>/dev/null | head -1)
+# 允许在非越狱环境（如 CI / 单元测试）加载脚本：此时 JB 为空，相关命令会明确报错
+JBCTL=""
+[ -n "$JB" ] && JBCTL=$JB/usr/bin/jbctl
+
+# BASE 从脚本自身位置推导：不同进程的 vroot 不同，硬编码 /usr 会读到错的 state。
+# 若推导出来的目录里没有 state 文件，再回退到 jbroot 的绝对路径（daemon 场景）。
+BASE=$(cd "$(dirname "$0")" 2>/dev/null && pwd -P) || BASE=/usr/libexec/tsltv
+if [ ! -f "$BASE/installed.tsv" ] && [ -f "$JB/usr/libexec/tsltv/installed.tsv" ]; then
+  BASE=$JB/usr/libexec/tsltv
+elif [ ! -d "$BASE" ] && [ -d "$JB/usr/libexec/tsltv" ]; then
+  BASE=$JB/usr/libexec/tsltv
+fi
+STATE=$BASE/installed.tsv
+WORK=/var/tmp/tsltv.work
+
+die() { printf '错误: %s\n' "$*" >&2; exit 1; }
+# 调试用：ALMA_TRACE=1 时把各阶段耗时写到 stderr
+trace() { [ -f /var/tmp/alma-trace ] && printf '[trace] %s %s\n' "$(date +%s%3N)" "$*" >&2; return 0; }
+say() { printf '%s\n' "$*"; }
+
+need_root() {
+  [ "$(id -u)" = 0 ] || die "需要 root 权限：sudo tsltv ${*:-<子命令>}"
+}
+
+# ---------- 底层原语 ----------
+
+# 生成最小可用 entitlements，application-identifier 必须等于自身 bundle id
+gen_ent() { # <bid> <out>
+  cat > "$2" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>application-identifier</key><string>$1</string>
+<key>get-task-allow</key><true/>
+<key>platform-application</key><true/>
+<key>com.apple.private.security.no-sandbox</key><true/>
+<key>com.apple.private.security.no-container</key><true/>
+<key>com.apple.private.security.container-required</key><false/>
+<key>com.apple.security.network.client</key><true/>
+<key>com.apple.security.network.server</key><true/>
+</dict></plist>
+EOF
+}
+
+# 双哈希 ad-hoc 签名（单哈希必死）
+sign_one() { # <macho> <ent>
+  ldid -S"$2" -Cadhoc -Hsha1 -Hsha256 "$1" 2>/dev/null
+}
+
+# 写内核信任缓存。jbctl 对 /var/containers/Bundle/Application/** 有路径黑名单，
+# 遇到就绕道 /var/tmp（cdhash 与路径无关）。
+need_jb() {
+  [ -n "${JBCTL:-}" ] || die "未检测到越狱环境（找不到 .jbroot-*）；这台设备可能没有 roothide 越狱"
+}
+
+trust_one() { # <macho>
+  _p="$1"
+  if "$JBCTL" trustcache add "$_p" >/dev/null 2>&1; then
+    return 0
+  fi
+  _t=$WORK/trustsink
+  rm -rf "$_t"; mkdir -p "$_t"
+  cp "$_p" "$_t/bin" || return 1
+  if "$JBCTL" trustcache add "$_t/bin" >/dev/null 2>&1; then
+    rm -rf "$_t"; return 0
+  fi
+  rm -rf "$_t"; return 1
+}
+
+cdhash_of() { # <macho>
+  ldid -h "$1" 2>/dev/null | sed -n 's/.*CandidateCDHash sha256=//p' | head -1
+}
+
+# 读 Info.plist 的字符串值。tvOS 的 plutil 没有 -extract、也不支持 -o，
+# 所以：先按 XML 直接抓；抓不到（二进制 plist）再复制到临时文件用 plutil 转 XML。
+_plist_sed() { # <file> <key>
+  # 情况一：<key>K</key><string>V</string> 同一行
+  _r=$(sed -n "s|.*<key>$2</key>[[:space:]]*<string>\(.*\)</string>.*|\1|p" "$1" 2>/dev/null | head -1)
+  [ -n "$_r" ] && { printf '%s\n' "$_r"; return 0; }
+  # 情况二：key 与 string 分两行
+  sed -n "/<key>$2<\/key>[[:space:]]*$/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}" "$1" 2>/dev/null | head -1
+}
+
+_plist_get() { # <plist> <key>
+  _v=$(_plist_sed "$1" "$2")
+  [ -n "$_v" ] && { printf '%s\n' "$_v"; return 0; }
+  command -v plutil >/dev/null 2>&1 || return 1
+  rm -rf "$WORK/plist"; mkdir -p "$WORK/plist"
+  _c=$WORK/plist/p.plist
+  cp "$1" "$_c" 2>/dev/null || return 1
+  plutil -convert xml1 "$_c" >/dev/null 2>&1 || return 1
+  _v=$(_plist_sed "$_c" "$2")
+  rm -rf "$WORK/plist"
+  [ -n "$_v" ] && { printf '%s\n' "$_v"; return 0; }
+  return 1
+}
+
+bid_of() { _plist_get "$1/Info.plist" CFBundleIdentifier; }
+exe_of() { _plist_get "$1/Info.plist" CFBundleExecutable; }
+
+is_macho() {
+  [ -f "$1" ] && [ ! -L "$1" ] || return 1
+  _h=$(head -c 4 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+  case "$_h" in
+    cffaedfe|cefaedfe|cafebabe) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# ---------- 记账 ----------
+
+state_init() { [ -f "$STATE" ] || : > "$STATE"; }
+
+state_has() { # <bid>
+  state_init
+  cut -f1 "$STATE" 2>/dev/null | grep -Fxq "$1"
+}
+
+state_path() { # <bid>
+  cut -f1,2 "$STATE" 2>/dev/null | awk -F'\t' -v b="$1" '$1==b{print $2; exit}'
+}
+
+state_add() { # <bid> <path> <cdhash> [origin]
+  state_init
+  state_del "$1"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" \
+    "$(date '+%Y-%m-%d %H:%M:%S')" "${4:-install}" >> "$STATE"
+}
+
+state_origin() { # <bid>
+  awk -F'\t' -v b="$1" '$1==b{print $5; exit}' "$STATE" 2>/dev/null
+}
+
+state_del() { # <bid>
+  state_init
+  grep -v -- "^$1	" "$STATE" > "$STATE.tmp" 2>/dev/null || : > "$STATE.tmp"
+  mv "$STATE.tmp" "$STATE"
+}
+
+# ---------- 子命令 ----------
+
+cmd_doctor() {
+  need_jb
+  say "== TSLTV 环境自检 =="
+  printf '%-26s %s\n' "root" "$([ "$(id -u)" = 0 ] && echo OK || echo 否)"
+  printf '%-26s %s\n' "jbroot" "$([ -d "$JB" ] && echo "$JB" || echo 缺失)"
+  printf '%-26s %s\n' "jbctl" "$([ -x "$JBCTL" ] && echo OK || echo 缺失)"
+  printf '%-26s %s\n' "ldid" "$(command -v ldid || echo 缺失)"
+  printf '%-26s %s\n' "uicache" "$(command -v uicache || echo 缺失)"
+  printf '%-26s %s\n' "unzip" "$(command -v unzip || echo 缺失)"
+  printf '%-26s %s\n' "信任缓存" "$("$JBCTL" trustcache info 2>/dev/null | grep -c 'trust cache') 个"
+  printf '%-26s %s\n' "已记账应用" "$(state_init; wc -l < "$STATE" | tr -d ' ')"
+  printf '%-26s %s\n' "磁盘余量" "$(df -h /private/var | awk 'NR==2{print $4}')"
+}
+
+cmd_list() {
+  state_init
+  if [ ! -s "$STATE" ]; then say "(空)"; return 0; fi
+  printf '%-34s %-10s %s\n' BUNDLE_ID STATE PATH
+  while IFS='	' read -r bid path cd _ts; do
+    [ -n "$bid" ] || continue
+    if [ -d "$path" ]; then st=present; else st=MISSING; fi
+    printf '%-34s %-10s %s\n' "$bid" "$st" "$path"
+  done < "$STATE"
+}
+
+# 启动一个已安装应用（走 FrontBoard，屏幕在线才有效）
+cmd_launch() {
+  bid=${1:-}
+  [ -n "$bid" ] || die "用法: tsltv launch <bundle-id>"
+  uiopen --bundleid "$bid" || die "uiopen 失败"
+  say "已请求启动: $bid"
+}
+
+# 安装前检查主可执行：加密包/跨平台/系统版本过低，都提前给明确结论
+# 返回 0=可继续，非 0=已打印原因应中止
+precheck_app() { # <appdir> <exe_name>
+  _app="$1"; _exe="$2"
+  _target="$_app/$_exe"
+  _out=$(macho_info "$_target") || { say "    探测: 读不到 ${_exe}，跳过预检"; return 0; }
+  say "    探测: $_out"
+  precheck_verdict "$_out"
+  return $?
+  case "$_out" in
+    *cryptid=0*) ;;
+  esac
+  case "$_out" in
+    *"platform=2"*)
+      say "注意: 该二进制是 iOS 平台（platform=2），在 tvOS 上 dyld 会拒绝加载系统库。"
+      say "  可用 work/minos/patch_platform.py 改成 3，但 API 兼容性自负。"
+      ;;
+  esac
+  _min=$(printf '%s' "$_out" | sed -n 's/.*minos=\([0-9]*\.\([0-9]*\)\).*/\1/p')
+  if [ -n "$_min" ]; then
+    _major=${_min%%.*}
+    if [ "${_major:-0}" -gt 17 ] 2>/dev/null; then
+      say "注意: 该包要求 tvOS ${_min}，高于本机 17.0，可能无法启动。"
+    fi
+  fi
+  return 0
+}
+
+# 纯 shell 解析 Mach-O 头（不依赖 machocheck，规避 vroot 造成的路径不可见）
+# 输出: "platform=N minos=X.Y cryptid=Z"，失败返回 1
+macho_info() { # <file>  输出 "platform=N minos=X.Y cryptid=Z"
+  _f="$1"
+  [ -f "$_f" ] || return 1
+  # 一次读头部：magic + ncmds + sizeofcmds（偏移 0/16/20）
+  _magic=$(od -An -tx4 -j 0 -N 4 "$_f" 2>/dev/null | tr -d ' \n')
+  [ "$_magic" = "feedfacf" ] || return 1
+  # shellcheck disable=SC2046  # od 输出按空白分词是刻意的
+  set -- $(od -An -tu4 -j 16 -N 8 "$_f" 2>/dev/null)
+  _ncmds=$1; _size=$2
+  case "$_ncmds" in ''|*[!0-9]*) return 1 ;; esac
+  case "$_size"  in ''|*[!0-9]*) return 1 ;; esac
+  [ "$_size" -gt 0 ] && [ "$_size" -lt 200000 ] || return 1
+  # 一次把整段 load command 转成 u32 流，交给 awk 线性扫（避免每个命令 fork 一次 od）
+  od -An -tu4 -v -j 32 -N "$_size" "$_f" 2>/dev/null | awk '
+    { for (i = 1; i <= NF; i++) v[++n] = $i }
+    END {
+      i = 1; plat = 0; minos = 0; crypt = 0
+      while (i + 1 <= n) {
+        cmd = v[i]; size = v[i+1]
+        if (size < 2) break
+        if (cmd == 50) {                     # LC_BUILD_VERSION
+          plat = v[i+2]; m = v[i+3]
+          minos = int(m / 65536) "." int(m / 256) % 256
+        } else if (cmd == 44) {              # LC_ENCRYPTION_INFO_64
+          crypt = v[i+4]
+        }
+        i += int(size / 4)
+      }
+      printf "platform=%d minos=%s cryptid=%d\n", plat, (minos == 0 ? "0.0" : minos), crypt
+    }'
+}
+
+# 用商店自己升级自己：下载 deb 并交给 dpkg
+# 注意：postinst 会重启 tsltvd，所以真正的安装放到后台延迟执行，
+#       先把响应回给调用方，否则请求会被自己的重启打断。
+cmd_selfupdate() {
+  need_root "$@"
+  url=${1:-}
+  [ -n "$url" ] || die "用法: tsltv selfupdate <deb 直链>"
+  command -v curl >/dev/null 2>&1 || die "缺 curl"
+  dl=/var/tmp/alma-selfupdate.deb
+  log=/var/tmp/alma-selfupdate.log
+  say "==> 下载 $url"
+  curl -fL --connect-timeout 15 --max-time 300 -o "$dl" "$url" || die "下载失败"
+  [ -s "$dl" ] || die "下载内容为空"
+  say "    大小 $(wc -c < "$dl" | tr -d ' ') 字节"
+  if command -v dpkg-deb >/dev/null 2>&1; then
+    _pkg=$(dpkg-deb -f "$dl" Package 2>/dev/null)
+    say "    包名: ${_pkg:-未知}"
+  fi
+  say "==> 交给 dpkg 安装（后台执行，约 10 秒）"
+  ( sleep 1; dpkg -i "$dl" > "$log" 2>&1 ) >/dev/null 2>&1 &
+  say "    完成后服务会自动重启，刷新页面即可"
+  say "    日志: $log"
+}
+
+cmd_version() {
+  _v=$(dpkg-query -W -f='${Version}' trollstore-lite-tv 2>/dev/null)
+  [ -n "$_v" ] || _v=$(cat "$BASE/VERSION" 2>/dev/null)
+  # 源码树里直接运行时，VERSION 在仓库根
+  [ -n "$_v" ] || _v=$(cat "$BASE/../../VERSION" 2>/dev/null)
+  printf '%s\n' "${_v:-unknown}"
+}
+
+
+# 根据探测结果给结论：0=可继续，1=拒绝。抽成纯函数便于单元测试。
+precheck_verdict() { # "<platform=N minos=X.Y cryptid=Z>"
+  _line="$1"
+  _plat=$(printf '%s' "$_line" | sed -n 's/.*platform=\([0-9]*\).*/\1/p')
+  _minos=$(printf '%s' "$_line" | sed -n 's/.*minos=\([0-9.]*\).*/\1/p')
+  _crypt=$(printf '%s' "$_line" | sed -n 's/.*cryptid=\([0-9]*\).*/\1/p')
+
+  if [ "${_crypt:-0}" != "0" ]; then
+    say "拒绝安装: 这是加密的 App Store 包（cryptid≠0）。"
+    say "  加密二进制在 tvOS 上启动即被内核杀死；需先解密（FairPlay）才能用。"
+    return 1
+  fi
+  if [ "${_plat:-3}" = "2" ]; then
+    say "注意: 该二进制是 iOS 平台（platform=2），在 tvOS 上 dyld 会拒绝加载系统库。"
+    say "  可改 platform 为 3，但 API 兼容性自负。"
+  fi
+  _major=${_minos%%.*}
+  if [ -n "${_major:-}" ] && [ "${_major:-0}" -gt 17 ] 2>/dev/null; then
+    say "注意: 该包要求 tvOS ${_minos}，高于本机 17.0，可能无法启动。"
+  fi
+  return 0
+}
+
+# 重新注册（借鉴 TrollStore RootHelper 的 refresh/refresh-all）
+cmd_refresh() {
+  need_root "$@"
+  if [ "${1:-}" = "--all" ]; then
+    say "==> 全量重建注册（uicache -a）"
+    uicache -a >/dev/null 2>&1
+    say "完成"
+    return 0
+  fi
+  state_init
+  [ -s "$STATE" ] || { say "记账为空"; return 0; }
+  _n=0
+  while IFS='	' read -r bid path cd _ts origin; do
+    [ -n "$path" ] || continue
+    [ -d "$path" ] || continue
+    uicache -p "$path" >/dev/null 2>&1 && _n=$((_n+1))
+  done < "$STATE"
+  say "已重新注册 $_n 个应用"
+}
+
+# 查看注册类型（System / User），对应 TrollStore 的 modify-registration 只读侧
+cmd_registration() {
+  need_root "$@"
+  if [ -n "${1:-}" ]; then
+    uicache -i "$1" 2>&1 | sed -n '1,12p'
+    return 0
+  fi
+  state_init
+  [ -s "$STATE" ] || return 0
+  printf '%-34s %s\n' BUNDLE_ID TYPE
+  while IFS='	' read -r bid path cd _ts origin; do
+    [ -n "$bid" ] || continue
+    _t=$(uicache -i "$bid" 2>/dev/null | sed -n 's/.*Type: *//p' | head -1)
+    printf '%-34s %s\n' "$bid" "${_t:-?}"
+  done < "$STATE"
+}
+
+# 投递目录：把 ipa 放进 INBOX，电视上点一下就能装（省得用遥控器输 URL）
+INBOX=/var/tmp/tsltv-inbox
+
+cmd_inbox() {
+  mkdir -p "$INBOX" 2>/dev/null
+  _n=0
+  for f in "$INBOX"/*.ipa; do
+    [ -f "$f" ] || continue
+    _n=$((_n+1))
+    printf '%s\t%s\n' "$(basename "$f")" "$(wc -c < "$f" | tr -d ' ')"
+  done
+  [ "$_n" -eq 0 ] && say "（投递目录为空：${INBOX}）"
+  return 0
+}
+
+# 安装投递目录里的所有 ipa，装完删除
+cmd_inbox_install() {
+  need_root "$@"
+  mkdir -p "$INBOX" 2>/dev/null
+  _c=0
+  for _ipa in "$INBOX"/*.ipa; do
+    [ -f "$_ipa" ] || continue
+    say "==> $(basename "$_ipa")"
+    if cmd_install "$_ipa"; then
+      rm -f "$_ipa"
+      _c=$((_c+1))
+    else
+      say "    失败，保留文件以便重试"
+    fi
+  done
+  [ "$_c" -eq 0 ] && say "投递目录里没有可安装的 ipa"
+  say "完成 $_c 个"
+}
+
+# 机器可读探测（给 GUI 用）：每行 TSV
+# bundle_id  path  cdhash  trusted(0/1)  registered(0/1)  origin
+cmd_probe() {
+  need_jb
+  state_init
+  [ -s "$STATE" ] || return 0
+  # 信任缓存和注册表各只取一次（每个 app 各跑一遍会慢到几十秒）
+  _tc=$("$JBCTL" trustcache info 2>/dev/null)
+  _ui=$(uicache -l 2>/dev/null)
+  while IFS='	' read -r bid path cd _ts origin; do
+    [ -n "$bid" ] || continue
+    # 列表用记账里的 cdhash（安装/纳入时算好的），不重新跑 ldid —— 否则整页要好几秒
+    cd2="$cd"
+    trusted=0
+    if [ -n "$cd2" ]; then
+      trusted=$(printf '%s' "$_tc" | grep -ic -- "$cd2")
+      [ "$trusted" -ge 1 ] && trusted=1 || trusted=0
+    fi
+    reg=$(printf '%s' "$_ui" | grep -c -- "$bid")
+    [ "$reg" -ge 1 ] && reg=1 || reg=0
+    # 一次转换取两个字段（每个 app 各转一次会比逐个 key 快好几倍）
+    _p="$path/Info.plist"; _x="$WORK/probe.plist"
+    rm -f "$_x"; cp "$_p" "$_x" 2>/dev/null && plutil -convert xml1 "$_x" >/dev/null 2>&1
+    _src="$_x"; [ -f "$_src" ] || _src="$_p"
+    nm=$(_plist_sed "$_src" CFBundleDisplayName)
+    [ -n "$nm" ] || nm=$(_plist_sed "$_src" CFBundleName)
+    [ -n "$nm" ] || nm=$bid
+    ver=$(_plist_sed "$_src" CFBundleShortVersionString)
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$bid" "$path" "${cd2:-?}" "$trusted" "$reg" "${origin:-install}" "$nm" "${ver:--}"
+  done < "$STATE"
+}
+
+# 把已经安装、但不在记账里的 app 纳入管理（不重新签名）
+cmd_adopt() {
+  need_root "$@"
+  want=${1:-}
+  [ -n "$want" ] || die "用法: tsltv adopt <Name.app | bundle-id | --all>"
+
+  if [ "$want" = "--all" ]; then
+    # shellcheck disable=SC2046  # 应用路径不含空格，按空白分词是刻意的
+    set -- $(ls -d /Applications/*.app 2>/dev/null)
+  fi
+
+  rc=0
+  for p in "$@"; do
+    case "$p" in
+      /Applications/*.app) app=$p ;;
+      *.app)               app=/Applications/$p ;;
+      *)                   app=/Applications/$p.app ;;
+    esac
+    if [ ! -d "$app" ]; then say "跳过（不存在）: $app"; rc=1; continue; fi
+    bid=$(bid_of "$app")
+    exe_name=$(exe_of "$app")
+    [ -n "$bid" ] && [ -n "$exe_name" ] || { say "跳过（读不到 Info.plist）: $app"; rc=1; continue; }
+    if state_has "$bid"; then say "已在册: $bid"; continue; fi
+    cd=$(cdhash_of "$app/$exe_name")
+    state_add "$bid" "$app" "$cd" adopt
+    say "纳入: $bid -> $app"
+  done
+  return $rc
+}
+
+cmd_verify() {
+  need_jb
+  state_init
+  if [ $# -gt 0 ]; then list="$*"; else list=$(cut -f1 "$STATE" 2>/dev/null); fi
+  [ -n "$list" ] || { say "(没有可校验的条目)"; return 0; }
+  bad=0
+  _tc=$("$JBCTL" trustcache info 2>/dev/null)
+  _ui=$(uicache -l 2>/dev/null)
+  for bid in $list; do
+    path=$(state_path "$bid")
+    if [ -z "$path" ]; then say "$bid: 未记账"; bad=$((bad+1)); continue; fi
+    exe="$path/$(exe_of "$path")"
+    [ -f "$exe" ] || { say "$bid: 缺可执行文件 $exe"; bad=$((bad+1)); continue; }
+    cd=$(cdhash_of "$exe")
+    ent=$(printf '%s' "$_tc" | grep -ic -- "$cd")
+    has_hrcfb=$(ldid -e "$exe" 2>/dev/null | grep -c 'get-task-allow')
+    has_adhoc=$(ldid -h "$exe" 2>/dev/null | grep -c 'flags=0x2(adhoc)')
+    reg=$(printf '%s' "$_ui" | grep -c -- "$bid")
+    origin=$(state_origin "$bid")
+    # get-task-allow 只对本工具自签的包是硬要求；
+    # 越狱自带 app（origin=adopt）走 Relaxin 自己的签名通道，没有该键也能运行。
+    need_hrcfb=0; [ "$origin" = install ] && need_hrcfb=1
+    if [ "$ent" -ge 1 ] && [ "$has_adhoc" -ge 1 ] && [ "$reg" -ge 1 ] \
+       && { [ "$need_hrcfb" = 0 ] || [ "$has_hrcfb" -ge 1 ]; }; then
+      printf 'PASS  %-32s cdhash=%s…  origin=%s hrcfb=%s\n' \
+        "$bid" "$(printf %.12s "$cd")" "$origin" "$has_hrcfb"
+    else
+      printf 'FAIL  %-32s 信任=%s hrcfb=%s adhoc=%s 注册=%s origin=%s\n' \
+        "$bid" "$ent" "$has_hrcfb" "$has_adhoc" "$reg" "$origin"
+      bad=$((bad+1))
+    fi
+  done
+  [ "$bad" -eq 0 ] && say "全部通过" || say "$bad 项异常"
+  return "$([ "$bad" -eq 0 ] && echo 0 || echo 1)"
+}
+
+# 走常驻服务端执行同一条命令（FIFO + 响应文件）
+cmd_remote() {
+  [ $# -gt 0 ] || die "用法: tsltv remote <子命令...>"
+  RUN=/var/run/tsltv
+  [ -p "$RUN/req.fifo" ] || die "daemon 未运行：$RUN/req.fifo 不存在"
+
+  id=$$
+  cmdline="$*"
+  case "$cmdline" in
+    *';'*|*'|'*|*'&'*|*'$'*|*'('*|*')'*|*'<'*|*'>'*|*'"'*|*"'"*|*'`'*|*'\\'*)
+      die "命令里不允许 shell 元字符" ;;
+  esac
+
+  printf '%s\t%s\n' "$id" "$cmdline" > "$RUN/req.fifo" || die "写请求失败（需要 root）"
+
+  i=0
+  while [ ! -f "$RUN/$id.done" ]; do
+    i=$((i+1))
+    [ "$i" -gt 1800 ] && { rm -f "$RUN/$id".* 2>/dev/null; die "等待 daemon 超时"; }
+    sleep 0.1
+  done
+
+  cat "$RUN/$id.out" 2>/dev/null
+  rc=$(cat "$RUN/$id.rc" 2>/dev/null)
+  rm -f "$RUN/$id.out" "$RUN/$id.rc" "$RUN/$id.done" 2>/dev/null
+  return "${rc:-0}"
+}
+
+cmd_trust() {
+  need_jb
+  case "${1:-status}" in
+    status)
+      "$JBCTL" trustcache info 2>/dev/null | head -8
+      ;;
+    retrust)
+      state_init
+      [ -s "$STATE" ] || die "记账为空，没有可重放的对象"
+      ok=0; badn=0
+      while IFS='	' read -r bid path cd _ts; do
+        [ -n "$path" ] || continue
+        exe="$path/$(exe_of "$path")"
+        [ -f "$exe" ] || { badn=$((badn+1)); continue; }
+        if trust_one "$exe"; then ok=$((ok+1)); else badn=$((badn+1)); fi
+      done < "$STATE"
+      say "重放完成: ok=$ok bad=$badn"
+      ;;
+    *) die "用法: tsltv trust [status|retrust]" ;;
+  esac
+}
+
+cmd_install() {
+  need_root "$@"
+  src=${1:-}
+  [ -n "$src" ] || die "用法: tsltv install <App.app | xxx.ipa>"
+  [ -e "$src" ] || die "找不到: $src"
+
+  if [ -e "$WORK" ] && [ ! -d "$WORK" ]; then rm -f "$WORK"; fi
+  trace "work-reset"
+  rm -rf "$WORK"; mkdir -p "$WORK"
+
+  case "$src" in
+    *.ipa|*.tipa)
+      command -v unzip >/dev/null 2>&1 || die "缺 unzip"
+      unzip -q -o "$src" -d "$WORK/unpack" || die "解包失败"
+      app=$(ls -d "$WORK"/unpack/Payload/*.app 2>/dev/null | head -1)
+      [ -n "$app" ] || die "IPA 里没有 Payload/*.app"
+      ;;
+    *.app) app=$src ;;
+    *) die "只接受 .app / .ipa / .tipa" ;;
+  esac
+
+  bid=$(bid_of "$app")
+  [ -n "$bid" ] || die "读不到 CFBundleIdentifier（$app/Info.plist）"
+  exe_name=$(exe_of "$app")
+  [ -n "$exe_name" ] || die "读不到 CFBundleExecutable"
+
+  trace "unpacked"
+  # IPA 里通常带 iTunesMetadata.plist，可拿到原始名称/版本（TrollStore 也读这个）
+  _imeta=""
+  for _c in "$WORK/unpack/iTunesMetadata.plist" "$WORK/unpack/Payload/iTunesMetadata.plist"; do
+    [ -f "$_c" ] && { _imeta=$_c; break; }
+  done
+  if [ -n "$_imeta" ]; then
+    _mname=$(_plist_get "$_imeta" itemName)
+    _mver=$(_plist_get "$_imeta" bundleShortVersionString)
+    [ -n "$_mname" ] && say "    元数据: ${_mname}${_mver:+ v$_mver}"
+  fi
+
+  precheck_app "$app" "$exe_name" || exit 1
+  trace "precheck-done"
+
+  dest=/Applications/$(basename "$app")
+  say "==> $bid"
+  say "    源: $app"
+  say "    目标: $dest"
+
+  rm -rf "$dest"
+  cp -a "$app" "$dest" || die "复制失败"
+  trace "copied"
+
+  gen_ent "$bid" "$WORK/ent.plist"
+
+  signed=0; trusted=0; failed=0
+  # 遍历所有嵌套 Mach-O（主可执行 / Frameworks / PlugIns / appex）
+  find "$dest" -type f > "$WORK/machos.list" 2>/dev/null
+  while IFS= read -r _mf; do
+    [ -L "$_mf" ] && continue
+    is_macho "$_mf" || continue
+    if sign_one "$_mf" "$WORK/ent.plist"; then
+      signed=$((signed+1))
+      if trust_one "$_mf"; then trusted=$((trusted+1)); else failed=$((failed+1)); fi
+    else
+      failed=$((failed+1))
+    fi
+  done < "$WORK/machos.list"
+
+  trace "signed-trusted n=$signed/$trusted"
+  uicache -p "$dest" >/dev/null 2>&1
+  trace "uicached"
+
+  exe="$dest/$exe_name"
+  cd=$(cdhash_of "$exe")
+  state_add "$bid" "$dest" "$cd" install
+
+  say "==> 签名 $signed / 信任 $trusted / 失败 $failed"
+  say "==> 完成: $dest"
+  say "    cdhash: $cd"
+  say "    启动:  uiopen --bundleid $bid"
+  [ "$failed" -eq 0 ] || return 1
+}
+
+cmd_uninstall() {
+  need_root "$@"
+  bid=${1:-}
+  [ -n "$bid" ] || die "用法: tsltv uninstall <bundle-id>"
+  state_init
+  if ! state_has "$bid"; then
+    die "$bid 不是本工具安装的，拒绝卸载（保护系统应用）"
+  fi
+  path=$(state_path "$bid")
+  say "==> 卸载 $bid"
+  say "    $path"
+  uicache -u "$path" >/dev/null 2>&1
+  rm -rf "$path"
+  state_del "$bid"
+  uicache -s >/dev/null 2>&1
+  say "==> 完成"
+}
+
+# 从 URL 安装（TrollStore 的典型用法：给一个直链就行）
+cmd_install_url() {
+  need_root "$@"
+  url=${1:-}
+  [ -n "$url" ] || die "用法: tsltv install-url <http(s)://...ipa>"
+  command -v curl >/dev/null 2>&1 || die "缺 curl"
+  dl=/var/tmp/tsltv-dl
+  rm -rf "$dl"; mkdir -p "$dl"
+  f=$dl/download.ipa
+  say "==> 下载 $url"
+  curl -fL --connect-timeout 15 --max-time 900 -o "$f" "$url" || die "下载失败"
+  [ -s "$f" ] || die "下载内容为空"
+  say "    大小 $(wc -c < "$f" | tr -d ' ') 字节"
+  cmd_install "$f"
+}
+
+# ---------- 入口 ----------
+
+if [ "${TSLTV_LIB_ONLY:-0}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
+fi
+
+case "${1:-}" in
+  doctor)    need_root; shift; cmd_doctor ;;
+  list)      shift; cmd_list ;;
+  install)   shift; cmd_install "$@" ;;
+  install-url) shift; cmd_install_url "$@" ;;
+  uninstall) shift; cmd_uninstall "$@" ;;
+  probe)     need_root; shift; cmd_probe ;;
+  launch)    shift; cmd_launch "$@" ;;
+  selfupdate) shift; cmd_selfupdate "$@" ;;
+  version|--version) cmd_version ;;
+  refresh)   shift; cmd_refresh "$@" ;;
+  registration) need_root; shift; cmd_registration "$@" ;;
+  inbox)     shift; cmd_inbox ;;
+  inbox-install) shift; cmd_inbox_install "$@" ;;
+  adopt)     shift; cmd_adopt "$@" ;;
+  verify)    need_root; shift; cmd_verify "$@" ;;
+  trust)     need_root; shift; cmd_trust "$@" ;;
+  remote)    shift; cmd_remote "$@" ;;
+  ""|-h|--help|help)
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  *) die "未知子命令: $1（tsltv help）" ;;
+esac

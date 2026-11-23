@@ -1,0 +1,30 @@
+MIT License
+
+Copyright (c) 2026 Comic Chang
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+第三方组件：
+- TrollStore (https://github.com/opa334/TrollStore) — MIT，Copyright (c) 2022-2026 Lars Fröder
+  本项目未复制其代码，仅对齐了 RootHelper 的子命令接口与部分概念，详见 NOTICE。
+  其中 RootHelper/uicache.m 为 CoolStar 的 BSD-4-Clause，本项目未包含该文件。
+- ldid / uicache — 来自 Procursus，通过 APT 安装在设备上使用，未打包进本仓库。
+- Relaxin / roothide — 越狱环境，本项目的运行前提，非本项目组成部分。

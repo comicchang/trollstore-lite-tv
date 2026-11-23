@@ -1,0 +1,24 @@
+TSLTV —— tvOS 上的 TrollStore 概念实现（非官方 fork）
+================================================================
+
+本目录包含与 **TrollStore** 的接口兼容层。TrollStore 的版权与许可：
+
+    TrollStore
+    https://github.com/opa334/TrollStore
+    Copyright (c) 2022-2026 Lars Fröder
+    License: MIT
+    （其中 RootHelper/uicache.m 为 CoolStar 的 BSD-4-Clause）
+
+我们在**接口与设计**层面借鉴了以下部分，代码为本项目独立实现（POSIX shell），
+未复制 TrollStore 源码：
+
+  1. RootHelper 的子命令结构
+     install [force] [custom|installd] <ipa> / uninstall / refresh / refresh-all
+     / modification-registration —— 见 fork/tsh
+  2. 「app 只是壳，真正的特权操作在一个 root helper 里」这种分层
+  3. IPA 元数据（iTunesMetadata.plist 的 itemName / bundleShortVersionString）的用途
+  4. 「注册为 System 还是 User」这一区分（shouldRegisterAsUserByDefault）
+
+如果你要分发本项目的二进制，请保留本 NOTICE 与上述版权声明。
+
+关于「为什么不能直接 fork 上游代码并在 tvOS 编译」，见同目录的 PORTING.md。
