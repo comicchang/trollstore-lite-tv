@@ -1,5 +1,5 @@
 #!/bin/sh
-# 构建 TSLTV Lite 的 .deb
+# 构建 TrollStoreLiteTV Lite 的 .deb
 #
 #   ATV_PASS=<设备sudo密码> ./scripts/build-deb.sh [设备IP]
 #
@@ -37,19 +37,19 @@ cp "$ROOT/src/fork/tsh"                 "$STAGE/usr/libexec/tsltv/"
 echo "$VER" > "$STAGE/usr/libexec/tsltv/VERSION"
 cp "$ROOT/src/web/tsltvweb"         "$STAGE/usr/libexec/tsltv/"
 cp "$ROOT/src/tools/wake"               "$STAGE/usr/libexec/tsltv/"
-cp "$ROOT/src/daemon/"com.alma.*.plist  "$STAGE/Library/LaunchDaemons/"
-cp -a "$ROOT/src/gui/TSLTV.app"     "$STAGE/Applications/"
+cp "$ROOT/src/daemon/"com.trollstorelite.tv.*.plist  "$STAGE/Library/LaunchDaemons/"
+cp -a "$ROOT/src/gui/TrollStoreLiteTV.app"     "$STAGE/Applications/"
 
 # 让界面显示的版本与包版本一致
 plutil -replace CFBundleShortVersionString -string "$VER" \
-       "$STAGE/Applications/TSLTV.app/Info.plist" 2>/dev/null || true
+       "$STAGE/Applications/TrollStoreLiteTV.app/Info.plist" 2>/dev/null || true
 
 cat > "$STAGE/DEBIAN/control" <<EOF
 Package: trollstore-lite-tv
-Name: TSLTV Lite
+Name: TrollStoreLiteTV Lite
 Version: $VER
 Architecture: $ARCH
-Maintainer: Alma
+Maintainer: TrollStoreLiteTV
 Section: Applications
 Priority: optional
 Description: TrollStore-Lite for jailbroken tvOS - install and run ad-hoc signed apps
@@ -92,9 +92,9 @@ sign_and_trust() {
   "$LDID" -S"$ENT.one" -Cadhoc -Hsha1 -Hsha256 "$f" 2>/dev/null || return 0
   "$JBCTL" trustcache add "$f" >/dev/null 2>&1 || true
 }
-sign_and_trust /usr/libexec/tsltv/tsltvweb com.alma.tsltvweb
-sign_and_trust /usr/libexec/tsltv/wake        com.alma.wake
-sign_and_trust /Applications/TSLTV.app/TSLTV com.alma.tsltv
+sign_and_trust /usr/libexec/tsltv/tsltvweb com.trollstorelite.tv.web
+sign_and_trust /usr/libexec/tsltv/wake        com.trollstorelite.tv.wake
+sign_and_trust /Applications/TrollStoreLiteTV.app/TrollStoreLiteTV com.trollstorelite.tv
 rm -f "$ENT" "$ENT.one"
 
 mkdir -p /var/tmp/tsltv-inbox; chmod 777 /var/tmp/tsltv-inbox 2>/dev/null || true
@@ -102,9 +102,9 @@ for n in tsltv trollstore-lite-tv trollstore-lite-tv-cli tsl tsltv-cli; do
   ln -sf /usr/libexec/tsltv/tsltv /usr/bin/$n 2>/dev/null || true
 done
 
-uicache -p /Applications/TSLTV.app >/dev/null 2>&1 || true
+uicache -p /Applications/TrollStoreLiteTV.app >/dev/null 2>&1 || true
 
-JOBS="com.alma.tsltv.daemon com.alma.tsltv.web com.alma.tsltv.retrust"
+JOBS="com.trollstorelite.tv.daemon com.trollstorelite.tv.web com.trollstorelite.tv.retrust"
 
 for job in $JOBS; do
   launchctl bootout system/$job >/dev/null 2>&1 || true
@@ -125,7 +125,7 @@ for i in 1 2 3 4 5; do
 done
 
 echo "TrollStore Lite TV $VER installed:"
-echo "  TV app   TrollStore Lite TV (TSLTV.app)"
+echo "  TV app   TrollStore Lite TV (TrollStoreLiteTV.app)"
 echo "  Web      http://<device-ip>:8787"
 echo "  CLI      tsltv | trollstore-lite-tv | tsl"
 exit 0
@@ -133,10 +133,10 @@ POSTINST
 
 cat > "$STAGE/DEBIAN/prerm" <<'PRERM'
 #!/bin/sh
-for job in com.alma.tsltvd com.alma.tsltvweb com.alma.retrust; do
+for job in com.trollstorelite.tvd com.trollstorelite.tv.web com.trollstorelite.tv.retrust; do
   launchctl bootout system/$job >/dev/null 2>&1 || true
 done
-uicache -u /Applications/TSLTV.app >/dev/null 2>&1 || true
+uicache -u /Applications/TrollStoreLiteTV.app >/dev/null 2>&1 || true
 rm -f /usr/bin/tsltv /usr/bin/trollstore-lite /usr/bin/tsl 2>/dev/null || true
 exit 0
 PRERM
@@ -148,20 +148,20 @@ find "$STAGE" -name "._*" -delete 2>/dev/null || true
 
 echo "==> 推送到设备并打包"
 export COPYFILE_DISABLE=1
-tar -czf /tmp/alma-pkg-src.tar.gz -C "$STAGE" .
-$SCP /tmp/alma-pkg-src.tar.gz mobile@"$IP":/var/tmp/
+tar -czf /tmp/tsltv-src.tar.gz -C "$STAGE" .
+$SCP /tmp/tsltv-src.tar.gz mobile@"$IP":/var/tmp/
 $SSH "echo $ATV_PASS | sudo -S -p '' sh -c '
-  rm -rf /var/tmp/alma-pkg && mkdir -p /var/tmp/alma-pkg
-  tar -xzf /var/tmp/alma-pkg-src.tar.gz -C /var/tmp/alma-pkg
-  chown -R root:wheel /var/tmp/alma-pkg
-  dpkg-deb -b /var/tmp/alma-pkg /var/tmp/$DEB >/dev/null 2>&1
-  rm -rf /var/tmp/alma-pkg /var/tmp/alma-pkg-src.tar.gz
+  rm -rf /var/tmp/tsltv-pkg && mkdir -p /var/tmp/tsltv-pkg
+  tar -xzf /var/tmp/tsltv-src.tar.gz -C /var/tmp/tsltv-pkg
+  chown -R root:wheel /var/tmp/tsltv-pkg
+  dpkg-deb -b /var/tmp/tsltv-pkg /var/tmp/$DEB >/dev/null 2>&1
+  rm -rf /var/tmp/tsltv-pkg /var/tmp/tsltv-src.tar.gz
 '" || true
 
 echo "==> 取回产物"
 $SCP mobile@"$IP":/var/tmp/"$DEB" "$ROOT/dist/$DEB"
 $SSH "echo $ATV_PASS | sudo -S -p '' rm -f /var/tmp/$DEB" >/dev/null 2>&1 || true
-rm -rf "$(dirname "$STAGE")" /tmp/alma-pkg-src.tar.gz
+rm -rf "$(dirname "$STAGE")" /tmp/tsltv-src.tar.gz
 
 ls -lh "$ROOT/dist/$DEB"
 echo "安装： scp 到设备后  sudo dpkg -i $DEB"

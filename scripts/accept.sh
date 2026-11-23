@@ -1,5 +1,5 @@
 #!/bin/sh
-# TSLTV Lite 验收脚本 —— 一条命令跑完整条链路并给出 PASS/FAIL
+# TrollStoreLiteTV Lite 验收脚本 —— 一条命令跑完整条链路并给出 PASS/FAIL
 #
 #   ATV_PASS=<设备sudo密码> ./accept.sh [设备IP]
 #
@@ -24,7 +24,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 
 echo "=========== 1. 安装工具包 ==========="
 # /var/tmp 有 sticky 位，同名旧文件常常属于 root，用带随机后缀的名字绕开
-RNAME="alma-$$-$(date +%s).deb"
+RNAME="tsltv-$$-$(date +%s).deb"
 $SCP "$DEB" mobile@"$IP":/var/tmp/$RNAME
 $SSH "echo $ATV_PASS | sudo -S -p '' dpkg -i /var/tmp/$RNAME" 2>&1 | tail -3
 # postinst 里要签名+重启守护进程，给它最多 20 秒
@@ -51,7 +51,7 @@ cat > "$T/Payload/AcceptTest.app/Info.plist" <<'EOF'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>AcceptTest</string>
-<key>CFBundleIdentifier</key><string>com.alma.accept</string>
+<key>CFBundleIdentifier</key><string>com.trollstorelite.tv.test</string>
 <key>CFBundleName</key><string>AcceptTest</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>1.0</string>
@@ -73,12 +73,12 @@ echo "$out" | grep -q "cdhash:" || fail "没有拿到 cdhash：$out"
 echo "PASS  安装成功：$(echo "$out" | grep cdhash: | head -1 | sed 's/^ *//')"
 
 echo "=========== 4. 校验 ==========="
-v=$($SSH "echo $ATV_PASS | sudo -S -p '' /usr/libexec/tsltv/tsltv verify com.alma.accept" 2>&1)
-echo "$v" | grep -q "PASS  com.alma.accept" || fail "校验没过：$v"
+v=$($SSH "echo $ATV_PASS | sudo -S -p '' /usr/libexec/tsltv/tsltv verify com.trollstorelite.tv.test" 2>&1)
+echo "$v" | grep -q "PASS  com.trollstorelite.tv.test" || fail "校验没过：$v"
 echo "PASS  校验通过"
 
 echo "=========== 5. 启动（看是不是系统拉起的）==========="
-$SSH "echo $ATV_PASS | sudo -S -p '' /usr/libexec/tsltv/wake >/dev/null 2>&1; uiopen --bundleid com.alma.accept" >/dev/null 2>&1 || true
+$SSH "echo $ATV_PASS | sudo -S -p '' /usr/libexec/tsltv/wake >/dev/null 2>&1; uiopen --bundleid com.trollstorelite.tv.test" >/dev/null 2>&1 || true
 sleep 6
 p=$($SSH 'ps ax -o pid,ppid,command | grep "AcceptTest.app/AcceptTest" | grep -v grep | head -1' || true)
 if [ -z "$p" ]; then
@@ -90,7 +90,7 @@ else
 fi
 
 echo "=========== 6. 卸载 ==========="
-u=$($SSH "echo $ATV_PASS | sudo -S -p '' /usr/libexec/tsltv/tsltv uninstall com.alma.accept" 2>&1)
+u=$($SSH "echo $ATV_PASS | sudo -S -p '' /usr/libexec/tsltv/tsltv uninstall com.trollstorelite.tv.test" 2>&1)
 echo "$u" | grep -q "完成" || fail "卸载失败：$u"
 echo "PASS  卸载干净"
 

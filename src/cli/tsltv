@@ -46,8 +46,8 @@ STATE=$BASE/installed.tsv
 WORK=/var/tmp/tsltv.work
 
 die() { printf '错误: %s\n' "$*" >&2; exit 1; }
-# 调试用：ALMA_TRACE=1 时把各阶段耗时写到 stderr
-trace() { [ -f /var/tmp/alma-trace ] && printf '[trace] %s %s\n' "$(date +%s%3N)" "$*" >&2; return 0; }
+# 调试用：TrollStoreLiteTV_TRACE=1 时把各阶段耗时写到 stderr
+trace() { [ -f /var/tmp/tsltv-trace ] && printf '[trace] %s %s\n' "$(date +%s%3N)" "$*" >&2; return 0; }
 say() { printf '%s\n' "$*"; }
 
 need_root() {
@@ -173,7 +173,7 @@ state_del() { # <bid>
 
 cmd_doctor() {
   need_jb
-  say "== TSLTV 环境自检 =="
+  say "== TrollStoreLiteTV 环境自检 =="
   printf '%-26s %s\n' "root" "$([ "$(id -u)" = 0 ] && echo OK || echo 否)"
   printf '%-26s %s\n' "jbroot" "$([ -d "$JB" ] && echo "$JB" || echo 缺失)"
   printf '%-26s %s\n' "jbctl" "$([ -x "$JBCTL" ] && echo OK || echo 缺失)"
@@ -274,8 +274,8 @@ cmd_selfupdate() {
   url=${1:-}
   [ -n "$url" ] || die "用法: tsltv selfupdate <deb 直链>"
   command -v curl >/dev/null 2>&1 || die "缺 curl"
-  dl=/var/tmp/alma-selfupdate.deb
-  log=/var/tmp/alma-selfupdate.log
+  dl=/var/tmp/tsltv-selfupdate.deb
+  log=/var/tmp/tsltv-selfupdate.log
   say "==> 下载 $url"
   curl -fL --connect-timeout 15 --max-time 300 -o "$dl" "$url" || die "下载失败"
   [ -s "$dl" ] || die "下载内容为空"
@@ -659,7 +659,7 @@ cmd_install_url() {
 
 # ---------- 入口 ----------
 
-if [ "${TSLTV_LIB_ONLY:-0}" = "1" ]; then
+if [ "${TrollStoreLiteTV_LIB_ONLY:-0}" = "1" ]; then
   return 0 2>/dev/null || exit 0
 fi
 

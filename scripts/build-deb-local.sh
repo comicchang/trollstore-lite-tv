@@ -35,10 +35,10 @@ cp "$ROOT/src/fork/tsh"               "$STAGE/usr/libexec/tsltv/"
 cp "$ROOT/src/web/tsltvweb"           "$STAGE/usr/libexec/tsltv/"
 cp "$ROOT/src/tools/wake"             "$STAGE/usr/libexec/tsltv/"
 printf '%s\n' "$VER" >                "$STAGE/usr/libexec/tsltv/VERSION"
-cp "$ROOT/src/daemon/"com.alma.*.plist "$STAGE/Library/LaunchDaemons/"
-cp -a "$ROOT/src/gui/TSLTV.app"       "$STAGE/Applications/"
+cp "$ROOT/src/daemon/"com.trollstorelite.tv.*.plist "$STAGE/Library/LaunchDaemons/"
+cp -a "$ROOT/src/gui/TrollStoreLiteTV.app"       "$STAGE/Applications/"
 plutil -replace CFBundleShortVersionString -string "$VER" \
-       "$STAGE/Applications/TSLTV.app/Info.plist" 2>/dev/null || true
+       "$STAGE/Applications/TrollStoreLiteTV.app/Info.plist" 2>/dev/null || true
 
 cat > "$STAGE/DEBIAN/control" <<EOF
 Package: trollstore-lite-tv

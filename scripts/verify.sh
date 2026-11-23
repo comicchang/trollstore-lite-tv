@@ -1,5 +1,5 @@
 #!/bin/sh
-# TSLTV 验收脚本 —— 只读，不改设备任何东西
+# TrollStoreLiteTV 验收脚本 —— 只读，不改设备任何东西
 #
 # 用法:  ./verify.sh [设备IP]
 # 输出:  PASS/FAIL 矩阵 + 退出码（全部 PASS 才 0）
@@ -24,7 +24,7 @@ VER=""
 if [ -n "${ATV_PASS:-}" ]; then
   VER=$($SSH "echo $ATV_PASS | sudo -S -p '' /usr/libexec/tsltv/tsltv version" 2>/dev/null | tr -d '\r' || true)
 fi
-echo "================ TSLTV 验收 $(date '+%Y-%m-%d %H:%M:%S') ================"
+echo "================ TrollStoreLiteTV 验收 $(date '+%Y-%m-%d %H:%M:%S') ================"
 echo "工具版本: ${VER:-unknown}"
 echo
 echo
@@ -65,8 +65,8 @@ kppid=$($SSH "ps -o ppid= -p ${kpid:-0} 2>/dev/null | tr -d ' '" 2>/dev/null)
 row "由系统 launchd 启动" "$([ "${kppid:-x}" = "1" ] && echo PASS || echo FAIL)" "PPID=${kppid:-?} (1=launchd)"
 
 # 7. 安装器部署
-inst=$($SSH "test -f /usr/libexec/tsltv/install.sh && test -f /usr/libexec/tsltv/trustlib.sh && echo yes || echo no" 2>/dev/null)
-row "TrollStore 式安装器在位" "$([ "$inst" = yes ] && echo PASS || echo FAIL)" "/usr/libexec/tsltv/install.sh"
+inst=$($SSH "test -x /usr/libexec/tsltv/tsltv && test -x /usr/libexec/tsltv/tsltvd && echo yes || echo no" 2>/dev/null)
+row "TrollStore 式安装器在位" "$([ "$inst" = yes ] && echo PASS || echo FAIL)" "/usr/libexec/tsltv/tsltv"
 
 # 8. 屏幕是否亮（决定能否验证启动）
 echo

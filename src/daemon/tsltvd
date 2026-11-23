@@ -1,5 +1,5 @@
 #!/bin/sh
-# tsltvd —— TSLTV 常驻服务端（纯 sh）
+# tsltvd —— TrollStoreLiteTV 常驻服务端（纯 sh）
 #
 # 为什么不用 unix socket：tvOS 的 launchd 不支持按连接拉起
 # （Sockets + inetdCompatibility/OnDemand 实测 runs=0，子进程从未被 spawn）。

@@ -22,7 +22,7 @@ echo "==> 构建无签名 demo ipa"
 sh examples/hello-tvos/build.sh
 
 DEB=$(ls dist/trollstore-lite-tv_*.deb | tail -1)
-IPA="dist/TSLTVDemo-unsigned.ipa"
+IPA="dist/TrollStoreLiteTVDemo-unsigned.ipa"
 [ -f "$DEB" ] && [ -f "$IPA" ] || { echo "产物缺失"; exit 1; }
 
 echo "==> 上传 release $TAG"

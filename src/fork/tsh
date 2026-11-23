@@ -4,7 +4,7 @@
 # TrollStore 的 app 只是壳，真正干活的是 RootHelper（一个 root 二进制），
 # 由 app 以 `<rootHelper> install [force] [custom|installd] <ipa>` 形式调用。
 # 在 tvOS 上 RootHelper 编译不过（SDK 禁用 posix_spawn 系列、MCMAppContainer 不存在），
-# 但它的**接口**可以原样保留：这个脚本就是那个接口，底层换成 TSLTV 的
+# 但它的**接口**可以原样保留：这个脚本就是那个接口，底层换成 TrollStoreLiteTV 的
 # 「ad-hoc 签名 + 内核信任缓存」机制。
 #
 # 用法（与 TrollStore RootHelper 对齐）：

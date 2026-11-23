@@ -1,4 +1,4 @@
-// TSLTV —— tvOS 上的 TrollStore 等价物（GUI 前端）
+// TrollStore Lite TV —— tvOS 上的 TrollStore 等价物（GUI 前端）
 //
 // 架构：GUI 不直接做签名/信任（那是 root 的活），所有动作经 FIFO 交给
 //       /usr/libexec/tsltv/tsltvd 执行，再读回响应文件。
@@ -33,7 +33,7 @@ static NSString *ATRunDir(void) {
             return cached;
         }
     }
-    if (getenv("ALMA_SELFTEST")) {
+    if (getenv("TrollStoreLiteTV_SELFTEST")) {
         printf("[debug] 候选目录均无 req.fifo:\n");
         for (NSString *c in cands) {
             printf("  %s  exists=%d\n", c.UTF8String, [fm fileExistsAtPath:c]);
@@ -137,7 +137,7 @@ static NSArray<ATApp *> *ATProbe(void) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"TSLTV";
+    self.title = @"TrollStore Lite TV";
     self.tableView.rowHeight = 104;
 
     // 深色主题：默认白底 + 浅色字在电视上几乎看不见
@@ -167,7 +167,7 @@ static NSArray<ATApp *> *ATProbe(void) {
     head.backgroundColor = [UIColor colorWithWhite:0.07 alpha:1.0];
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(60, 30, 500, 60)];
-    title.text = @"TSLTV";
+    title.text = @"TrollStore Lite TV";
     title.textColor = [UIColor whiteColor];
     title.font = [UIFont boldSystemFontOfSize:44];
 
@@ -423,6 +423,7 @@ static NSArray<ATApp *> *ATProbe(void) {
 
 @interface ATDelegate : UIResponder <UIApplicationDelegate>
 @property (nonatomic, strong) UIWindow *window;
+@property (nonatomic, strong) NSTimer *shotTimer;
 @end
 
 @implementation ATDelegate
@@ -433,6 +434,29 @@ static NSArray<ATApp *> *ATProbe(void) {
     nav.navigationBarHidden = YES;
     self.window.rootViewController = nav;
     [self.window makeKeyAndVisible];
+
+    // 截图开关：设备上出现 /var/tmp/tsltv-screenshot 就把界面渲染成 PNG 写到
+    // /var/tmp/tsltv-shot.png 再退出。用定时轮询而不是只在启动时判断——
+    // 应用可能早被 launchd 拉起，事后才创建开关文件。
+    self.shotTimer = [NSTimer scheduledTimerWithTimeInterval:2.0
+                                                     repeats:YES
+                                                       block:^(NSTimer *t) {
+        if (![[NSFileManager defaultManager] fileExistsAtPath:[[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"shot.flag"]]) return;
+        [t invalidate];
+        CGSize size = CGSizeMake(1920, 1080);
+        UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:size];
+        UIImage *img = [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+            [self.window.rootViewController.view
+                drawViewHierarchyInRect:CGRectMake(0, 0, size.width, size.height)
+                     afterScreenUpdates:YES];
+        }];
+        NSData *png = UIImagePNGRepresentation(img);
+        BOOL ok = [png writeToFile:[NSTemporaryDirectory() stringByAppendingPathComponent:@"tsltv-shot.png"] atomically:YES];
+        NSLog(@"shot: %@ (%lu bytes)", ok ? @"ok" : @"failed", (unsigned long)png.length);
+        [[NSFileManager defaultManager] removeItemAtPath:[[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"shot.flag"] error:nil];
+        if (ok) exit(0);
+    }];
+
     return YES;
 }
 @end
@@ -440,7 +464,7 @@ static NSArray<ATApp *> *ATProbe(void) {
 int main(int argc, char *argv[]) {
     // 无屏幕自检：不做 UI，直接把 GUI 自己的 daemon 客户端跑一遍，
     // 用于在没有显示输出的情况下验证 IPC 通路（遥控器/界面仍需亮屏验证）。
-    if (getenv("ALMA_SELFTEST")) {
+    if (getenv("TrollStoreLiteTV_SELFTEST")) {
         @autoreleasepool {
             printf("== SELFTEST: probe ==\n%s\n", ATRun(@"probe").UTF8String);
             printf("== SELFTEST: verify ==\n%s\n", ATRun(@"verify").UTF8String);

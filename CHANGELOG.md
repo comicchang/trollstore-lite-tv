@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.1.0 — 2026-11-23
+
+**命名统一 / 主屏图标 / 网页商店修复 / 双语文档**
+
+- **命名统一**：全项目清除 "Alma"（含 `com.alma.*` 的 bundle id、launchd 标签、legacy 脚本）；
+  bundle id 统一为 `com.trollstorelite.tv`（守护进程 `.daemon` / `.web` / `.retrust`）；
+  应用包改为 `/Applications/TrollStoreLiteTV.app`；界面标题（电视 + 网页）统一显示全名
+  **TrollStore Lite TV**，缩写 `TSLTV` 在 README 术语表里标注
+- **主屏图标**：新增 `src/gui/make-icon.swift` 生成 tvOS brandassets（Back/Middle 两层），
+  构建时用 `actool` 编成 `Assets.car`；之前主屏没有图标就是因为缺这个
+- **网页商店修复（两个真 bug）**：
+  1. 整页走一个超长 `stringWithFormat`，CSS/JS 里未转义的 `%` 会把后面的内容截断 →
+     列表永远是空的、也只显示到标题。改为 `NSMutableString` 拼接
+  2. 页面取数要求 `probe` 退出码为 0，但 `probe` 在有异常项时返回非 0，导致整页静默变空 →
+     改为"有输出就用"
+- **文档双语**：`docs/zh/` 与 `docs/en/` 各一套（9 篇 + 根 README），顶部互相切换
+- 清理设备上的历史测试应用与过期记账（`com.alma.*`）
+
+## 2.0.7 — 2026-11-23
+
+**网页不再被引擎拖死 + 自检脚本修正**
+
+- 首页渲染要同步等引擎的 `probe`，引擎忙（大包安装、`trustcache info`）时整页会一起卡住，
+  实测出现过 12s 无响应。改为：`probe` 结果缓存 15s，且最多等 5s，超时就用上一次的数据
+- `verify.sh` 第 9 项还在检查早已不存在的 `install.sh`/`trustlib.sh`（改名遗留），
+  改为检查 `tsltv` 与 `tsltvd`
+
 ## 2.0.6 — 2026-11-23
 
 **网页商店并发处理**
@@ -38,12 +65,12 @@
 **改名与打包重构**（首个公开版本）
 
 - 项目更名 **TrollStore Lite TV**；仓库 `trollstore-lite-tv`
-- 内部标识统一：`/usr/libexec/tsltv`、`tsltv` / `tsltvd` / `tsltvweb`、bundle id `com.alma.tsltv`
+- 内部标识统一：`/usr/libexec/tsltv`、`tsltv` / `tsltvd` / `tsltvweb`、bundle id `com.trollstorelite.tv`
 - 新增命令别名：`tsltv`、`trollstore-lite-tv`、`tsl`
 - 修复：`postinst` 中的 launchd job 名与 plist 文件名不一致，导致装完服务不自启
 - 修复：`retrust.sh` 以 `installed.tsv` 为唯一来源（此前读的是过时的静态清单）
 - 新增 `examples/hello-tvos`（demo app 源码）与无签名 demo ipa 构建脚本
-- 打包脚本支持从旧包 `alma-trustlite` 迁移记账清单
+- 打包脚本支持从旧包 `trollstore-lite-tv` 迁移记账清单
 
 ## 1.0.12 — 2026-11-23
 

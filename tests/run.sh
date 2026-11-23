@@ -78,7 +78,7 @@ expect_rc 1 "remote 拒绝反引号" "$CLI" remote 'list `id`'
 # ---------------------------------------------------------------- 5. 预检判定
 group "安装前判定（纯函数）"
 verdict_case() { # <探测串> <期望rc> <描述>
-  out=$(TSLTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict \"\$1\"" sh "$1" 2>&1)
+  out=$(TrollStoreLiteTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict \"\$1\"" sh "$1" 2>&1)
   rc=$?
   if [ "$rc" = "$2" ]; then ok "$3"; else bad "$3：期望 rc=$2 实际 rc=$rc"; fi
 }
@@ -87,9 +87,9 @@ verdict_case "platform=3 minos=17.0 cryptid=1" 1 "加密包 → 拒绝"
 verdict_case "platform=2 minos=15.0 cryptid=0" 0 "iOS 包 → 放行但警告"
 verdict_case "platform=3 minos=18.0 cryptid=0" 0 "高 minOS → 放行但警告"
 
-warn=$(TSLTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict 'platform=2 minos=15.0 cryptid=0'" 2>&1)
+warn=$(TrollStoreLiteTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict 'platform=2 minos=15.0 cryptid=0'" 2>&1)
 case "$warn" in *"iOS 平台"*) ok "iOS 警告文案出现" ;; *) bad "缺少 iOS 平台警告" ;; esac
-warn=$(TSLTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict 'platform=3 minos=18.0 cryptid=0'" 2>&1)
+warn=$(TrollStoreLiteTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict 'platform=3 minos=18.0 cryptid=0'" 2>&1)
 case "$warn" in *"高于本机"*) ok "minOS 警告文案出现" ;; *) bad "缺少 minOS 警告" ;; esac
 
 # ---------------------------------------------------------------- 6. Mach-O 解析
@@ -100,7 +100,7 @@ if [ -d "$SDK" ]; then
 int main(void){ return 0; }
 EOF
   if clang -target arm64-apple-tvos17.0 -isysroot "$SDK" "$TMP/t.m" -o "$TMP/probe" 2>/dev/null; then
-    info=$(TSLTV_LIB_ONLY=1 sh -c ". \"$CLI\"; macho_info \"\$1\"" sh "$TMP/probe" 2>&1)
+    info=$(TrollStoreLiteTV_LIB_ONLY=1 sh -c ". \"$CLI\"; macho_info \"\$1\"" sh "$TMP/probe" 2>&1)
     case "$info" in
       *platform=3*minos=17.0*cryptid=0*) ok "解析结果: $info" ;;
       *) bad "解析异常: $info" ;;
@@ -116,12 +116,12 @@ fi
 group "demo ipa 产物"
 if [ -d "$SDK" ]; then
   if sh "$ROOT/examples/hello-tvos/build.sh" >/dev/null 2>&1; then
-    IPA="$ROOT/dist/TSLTVDemo-unsigned.ipa"
+    IPA="$ROOT/dist/TrollStoreLiteTVDemo-unsigned.ipa"
     if [ -f "$IPA" ]; then
       ok "生成 $(basename "$IPA")"
       listing=$(unzip -l "$IPA" 2>/dev/null | awk '{print $4}')
-      case "$listing" in *Payload/TSLTVDemo.app/Info.plist*) ok "包含 Payload/TSLTVDemo.app/Info.plist" ;; *) bad "ipa 结构不对" ;; esac
-      case "$listing" in *Payload/TSLTVDemo.app/TSLTVDemo*) ok "包含主可执行" ;; *) bad "缺主可执行" ;; esac
+      case "$listing" in *Payload/TrollStoreLiteTVDemo.app/Info.plist*) ok "包含 Payload/TrollStoreLiteTVDemo.app/Info.plist" ;; *) bad "ipa 结构不对" ;; esac
+      case "$listing" in *Payload/TrollStoreLiteTVDemo.app/TrollStoreLiteTVDemo*) ok "包含主可执行" ;; *) bad "缺主可执行" ;; esac
       # 必须是未签名的
       if command -v codesign >/dev/null 2>&1; then
         if codesign -dv "$IPA" >/dev/null 2>&1; then bad "ipa 竟然带签名（应未签名）"; else ok "确认未签名"; fi

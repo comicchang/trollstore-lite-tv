@@ -24,7 +24,7 @@ jobs:
         if: always()
         with:
           name: demo-ipa
-          path: dist/TSLTVDemo-unsigned.ipa
+          path: dist/TrollStoreLiteTVDemo-unsigned.ipa
           if-no-files-found: ignore
 
   package:
@@ -42,7 +42,7 @@ jobs:
           deb=$(ls dist/*.deb | head -1)
           echo "产物: $deb"
           dpkg-deb -I "$deb"
-          dpkg-deb -c "$deb" | grep -E 'tsltv$|TSLTV.app/TSLTV|\.plist' | head -10
+          dpkg-deb -c "$deb" | grep -E 'tsltv$|TrollStoreLiteTV.app/TrollStoreLiteTV|\.plist' | head -10
       - uses: actions/upload-artifact@v4
         with:
           name: deb

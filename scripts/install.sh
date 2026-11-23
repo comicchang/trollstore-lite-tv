@@ -1,5 +1,5 @@
 #!/bin/sh
-# 从 Mac 一条命令把 TSLTV Lite 装到 Apple TV 上
+# 从 Mac 一条命令把 TrollStoreLiteTV Lite 装到 Apple TV 上
 #
 #   ATV_PASS=<设备sudo密码> ./install.sh [设备IP]
 #
@@ -28,8 +28,8 @@ echo "==> 自检"
 $SSH "R(){ echo \"\$ATV_PASS\" | sudo -S -p '' \"\$@\"; }; \
       echo '--- 服务 ---'; \
       ps ax -o pid,etime,command | grep -E 'tsltvd|tsltvweb' | grep -v grep | awk '{print \$1, \$2, \$3}'; \
-      echo '--- 应用 ---'; uicache -l | grep -i alma.trust; \
+      echo '--- 应用 ---'; uicache -l | grep -i tsltv; \
       echo '--- 校验 ---'; R /usr/libexec/tsltv/tsltv verify | tail -3"
 
 echo
-echo "打开 http://$IP:8787 ，或在电视主屏点 TSLTV。"
+echo "打开 http://$IP:8787 ，或在电视主屏点 TrollStoreLiteTV。"

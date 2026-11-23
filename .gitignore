@@ -2,7 +2,7 @@
 src/web/tsltvweb
 src/tools/wake
 src/tools/machocheck
-src/gui/TSLTV.app/
+src/gui/TrollStoreLiteTV.app/
 examples/hello-tvos/.build/
 
 # 发行产物（用 scripts/build-deb.sh 生成；如需入库请显式 git add -f）

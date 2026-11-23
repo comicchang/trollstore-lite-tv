@@ -1,5 +1,5 @@
 #!/bin/sh
-# 每次越狱启动时由 com.alma.retrust 拉起：按「记账清单」重放信任缓存。
+# 每次越狱启动时由 com.trollstorelite.tv.retrust 拉起：按「记账清单」重放信任缓存。
 #
 # 之前这里用的是 trustlib.sh + manifest.txt（早期安装器留下的 86 行静态清单），
 # 已经过时：清单里有些路径早就不存在，而新装的应用又不在清单里。

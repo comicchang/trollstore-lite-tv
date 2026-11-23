@@ -1,4 +1,4 @@
-TSLTV —— tvOS 上的 TrollStore 概念实现（非官方 fork）
+TrollStoreLiteTV —— tvOS 上的 TrollStore 概念实现（非官方 fork）
 ================================================================
 
 本目录包含与 **TrollStore** 的接口兼容层。TrollStore 的版权与许可：

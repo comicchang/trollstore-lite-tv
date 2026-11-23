@@ -1,11 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>TSLTV</string>
-<key>CFBundleIdentifier</key><string>com.alma.tsltv</string>
-<key>CFBundleName</key><string>TSLTV</string>
+<key>CFBundleExecutable</key><string>TrollStoreLiteTV</string>
+<key>CFBundleIdentifier</key><string>com.trollstorelite.tv</string>
+<key>CFBundleName</key><string>TrollStoreLiteTV</string>
 <key>CFBundleDisplayName</key><string>TrollStore Lite TV</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleIcons</key>
+<dict>
+  <key>CFBundlePrimaryIcon</key>
+  <dict>
+    <key>CFBundleIconName</key><string>AppIcon</string>
+    <key>CFBundleIconFiles</key><array><string>AppIcon</string></array>
+  </dict>
+</dict>
 <key>CFBundleShortVersionString</key><string>1.0.7</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>CFBundleSupportedPlatforms</key><array><string>AppleTVOS</string></array>

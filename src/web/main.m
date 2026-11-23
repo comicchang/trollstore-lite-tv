@@ -1,4 +1,4 @@
-// tsltvweb —— TSLTV 的 Web 前端（tvOS 原生 CLI 程序，root 运行）
+// tsltvweb —— TrollStore Lite TV 的 Web 前端（tvOS 原生 CLI 程序，root 运行）
 //
 // 为什么有它：tvOS 的 GUI 必须屏幕亮着才能启动（PineBoard 不亮屏就不拉起 app）。
 // 这个程序不需要任何显示，直接监听 TCP，用浏览器就能完成「装 / 卸 / 校验」。
@@ -74,7 +74,7 @@ static NSString *ATRunDir(void) {
 }
 
 // 发一条命令给 daemon，等它写完响应
-static NSString *ATDaemon(NSString *command, int *rcOut) {
+static NSString *ATDaemonTimeout(NSString *command, int maxSecs, int *rcOut) {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *run = ATRunDir();
     NSString *fifo = [run stringByAppendingPathComponent:@"req.fifo"];
@@ -95,7 +95,8 @@ static NSString *ATDaemon(NSString *command, int *rcOut) {
     NSString *outp = [run stringByAppendingPathComponent:[ident stringByAppendingString:@".out"]];
     NSString *rcp  = [run stringByAppendingPathComponent:[ident stringByAppendingString:@".rc"]];
 
-    for (int i = 0; i < 9000; i++) {   // 20ms 粒度 × 9000 = 最多 180s（大 ipa 安装）
+    int iters = maxSecs * 50;          // 20ms 粒度
+    for (int i = 0; i < iters; i++) {
         if ([fm fileExistsAtPath:done]) break;
         usleep(20 * 1000);
     }
@@ -110,6 +111,10 @@ static NSString *ATDaemon(NSString *command, int *rcOut) {
     [fm removeItemAtPath:rcp error:nil];
     [fm removeItemAtPath:done error:nil];
     return text;
+}
+
+static NSString *ATDaemon(NSString *command, int *rcOut) {
+    return ATDaemonTimeout(command, 180, rcOut);   // 大 ipa 安装可能要几十秒
 }
 
 static NSString *UrlDecode(NSString *s) {
@@ -196,82 +201,110 @@ static NSString *TVCachedVersion(void) {
     return cached;
 }
 
-static NSString *PageHTML(void) {
+// 首页用的探测结果：命中缓存就立刻用，否则最多等 5 秒；
+// 引擎忙的时候宁可用上一次的数据，也不让整个页面卡住。
+static NSString *ProbeForPage(void) {
+    static NSString *cached = nil;
+    static time_t at = 0;
+    time_t now = time(NULL);
+    if (cached && (now - at) < 15) return cached;
+
     int rc = 0;
+    NSString *rows = ATDaemonTimeout(@"probe", 5, &rc);
+    // 注意：probe 在有异常项（缺信任/缺注册）时退出码非 0，但输出仍然有效，
+    // 不能因为 rc 就把整页列表丢掉。
+    if (rows.length > 0 && ![rows hasPrefix:@"daemon 超时"]) {
+        cached = rows; at = now; return cached;
+    }
+    if (cached) return cached;
+    return @"";
+}
+
+static NSString *PageHTML(void) {
     NSString *ver = TVCachedVersion();
-    NSString *rows = ATDaemon(@"probe", &rc);
+    NSString *rows = ProbeForPage();
+
     NSMutableString *tr = [NSMutableString string];
+    NSUInteger count = 0;
     for (NSString *line in [rows componentsSeparatedByString:@"\n"]) {
         if (line.length == 0) continue;
         NSArray *f = [line componentsSeparatedByString:@"\t"];
         if (f.count < 6) continue;
+        count++;
         BOOL trusted = [f[3] isEqualToString:@"1"];
         BOOL reg = [f[4] isEqualToString:@"1"];
         NSString *cdh = (NSString *)f[2];
-        NSString *cd = cdh.length > 12 ? [cdh substringToIndex:12] : cdh;
-        NSString *ver = f.count >= 8 ? (NSString *)f[7] : @"-";
+        NSString *short_ = cdh.length > 12 ? [cdh substringToIndex:12] : cdh;
         [tr appendFormat:
-            @"<tr><td class='bid'>%@</td><td class='dim'>%@</td>"
-             "<td class='%@'>%@</td><td class='%@'>%@</td>"
-             "<td class='dim'>%@</td><td class='dim mono'>%@</td>"
+            @"<tr><td class=bid>%@</td><td class=dim>%@</td>"
+             "<td class=%@>%@</td><td class=%@>%@</td><td class=dim>%@</td>"
+             "<td class=mono>%@…</td>"
              "<td><button onclick=\"act('uninstall','%@')\">卸载</button></td></tr>",
-            f[0], ver, trusted ? @"ok" : @"bad", trusted ? @"✓" : @"✗",
+            f.count > 6 ? f[6] : f[0], f.count > 7 ? f[7] : @"-",
+            trusted ? @"ok" : @"bad", trusted ? @"✓" : @"✗",
             reg ? @"ok" : @"bad", reg ? @"✓" : @"✗",
-            f[5], cd, f[0]];
+            f.count > 5 ? f[5] : @"-", short_, f[0]];
     }
-    if (tr.length == 0) tr = [NSMutableString stringWithString:@"<tr><td colspan='7' class='dim'>（暂无）</td></tr>"];
 
-    return [NSString stringWithFormat:
-        @"<!doctype html><meta charset=utf-8><title>TSLTV</title>"
-         "<meta name=viewport content='width=device-width,initial-scale=1'>"
-         "<style>"
-         "body{background:#0b0b0d;color:#e8e8ea;font:15px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding:28px}"
-         "h1{font-size:22px;margin:0 0 4px}"
-         ".sub{color:#8b8b93;margin-bottom:22px}"
-         "table{border-collapse:collapse;width:100%%}"
-         "th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #1e1e22}"
-         "th{color:#8b8b93;font-weight:500;font-size:13px}"
-         ".bid{font-weight:600}"
-         ".dim{color:#8b8b93}"
-         ".mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}"
-         ".ok{color:#39d353}.bad{color:#f0883e}"
-         "button{background:#1f6feb;border:0;color:#fff;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:13px}"
-         "button:hover{filter:brightness(1.15)}"
-         "#drop{border:1px dashed #30363d;border-radius:12px;padding:22px;text-align:center;margin:22px 0;color:#8b8b93}"
-         "#drop.hot{border-color:#1f6feb;color:#e8e8ea}"
-         "#log{white-space:pre-wrap;background:#111114;border:1px solid #1e1e22;border-radius:10px;padding:14px;"
-         "font-family:ui-monospace,Menlo,monospace;font-size:12px;min-height:30px;margin-top:18px}"
-         "</style>"
-         "<h1>TSLTV</h1><div class=sub>tvOS 应用安装器 · v" "%@" " · ad-hoc 签名 + 内核信任缓存</div>", ver,
-         "<div id=drop>把 .ipa 拖到这里，或 <input type=file id=f accept='.ipa' style='display:none'>"
-         "<label for=f style='color:#1f6feb;cursor:pointer'>选择文件</label></div>"
-         "<table><thead><tr><th>应用</th><th>版本</th><th>信任</th><th>注册</th><th>来源</th><th>cdhash</th><th></th></tr></thead>"
-         "<tbody id=tb>%@</tbody></table>"
-         "<div style='margin-top:18px'>"
-         "<button onclick=\"selfUpd()\" style='background:#238636'>更新自身</button>"
-         "<span class=dim style='margin-left:12px;font-size:13px'>"
-         "把新版 deb 的直链填进弹出的输入框（package: trollstore-lite-tv）</span></div>"
-         "<div id=log>就绪。已安装 %lu 个应用。</div>"
-         "<script>"
-         "const log=(t)=>{document.getElementById('log').textContent=t};"
-         "async function act(cmd,arg){log('执行 '+cmd+(arg?' '+arg:'')+' …');"
-         "const r=await fetch('/api/'+cmd+(arg?'?bid='+encodeURIComponent(arg):''),{method:'POST'});"
-         "log(await r.text());setTimeout(()=>location.reload(),1200)}"
-         "async function selfUpd(){"
-         "const u=prompt('新版 deb 的 http 直链：','http://192.168.1.10:8899/trollstore-lite-tv_1.0.3_appletvos-arm64e.deb');"
-         "if(!u)return;log('正在下载并交给 dpkg…');"
-         "const r=await fetch('/api/selfupdate?url='+encodeURIComponent(u),{method:'POST'});"
-         "log(await r.text()+'\\n\\n（服务约 10 秒后自动重启，刷新本页查看新版本）')}"
-         "async function upload(file){log('上传 '+file.name+' ('+file.size+' 字节)…');"
-         "const r=await fetch('/api/install?name='+encodeURIComponent(file.name),"
-         "{method:'POST',body:file});log(await r.text());setTimeout(()=>location.reload(),1500)}"
-         "const d=document.getElementById('drop'),inp=document.getElementById('f');"
-         "inp.onchange=e=>e.target.files[0]&&upload(e.target.files[0]);"
-         "['dragenter','dragover'].forEach(t=>d.addEventListener(t,e=>{e.preventDefault();d.classList.add('hot')}));"
-         "['dragleave','drop'].forEach(t=>d.addEventListener(t,e=>{e.preventDefault();d.classList.remove('hot')}));"
-         "d.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)upload(f)});"
-         "</script>",
-        tr, (unsigned long)[tr componentsSeparatedByString:@"<tr>"].count - 1];
+    // 用 NSMutableString 拼接：之前整页走一个超长 stringWithFormat，
+    // CSS/JS 里任何未转义的 % 都会把后面的内容截掉（列表因此永远为空）。
+    NSMutableString *h = [NSMutableString string];
+    [h appendString:@"<!doctype html><meta charset=utf-8><title>TrollStore Lite TV</title>"];
+    [h appendString:@"<meta name=viewport content='width=device-width,initial-scale=1'>"];
+    [h appendString:@"<style>"
+        "body{background:#0b0b0d;color:#e8e8ea;font:15px/1.5 -apple-system,system-ui,sans-serif;"
+        "margin:0;padding:28px}"
+        "h1{font-size:22px;margin:0 0 4px}.sub{color:#8b8b93;margin-bottom:22px}"
+        "table{border-collapse:collapse;width:100%}"
+        "th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #1e1e22}"
+        "th{color:#8b8b93;font-weight:500;font-size:13px}"
+        ".bid{font-weight:600}.dim{color:#8b8b93}"
+        ".mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}"
+        ".ok{color:#39d353}.bad{color:#f0883e}"
+        "button{background:#1f6feb;border:0;color:#fff;padding:6px 12px;border-radius:7px;"
+        "cursor:pointer;font-size:13px}button:hover{filter:brightness(1.15)}"
+        "#drop{border:1px dashed #30363d;border-radius:12px;padding:22px;text-align:center;"
+        "margin:22px 0;color:#8b8b93}#drop.hot{border-color:#1f6feb;color:#e8e8ea}"
+        "#log{white-space:pre-wrap;background:#111114;border:1px solid #1e1e22;border-radius:10px;"
+        "padding:14px;font-family:ui-monospace,Menlo,monospace;font-size:12px;min-height:30px;"
+        "margin-top:18px}"
+        "</style>"];
+    [h appendFormat:@"<h1>TrollStore Lite TV</h1><div class=sub>tvOS 应用安装器 · v%@ · "
+                    "ad-hoc 签名 + 内核信任缓存</div>", ver];
+    [h appendString:@"<div id=drop>把 .ipa 拖到这里，或 <input type=file id=f accept='.ipa' "
+                    "style='display:none'><label for=f style='color:#1f6feb;cursor:pointer'>"
+                    "选择文件</label></div>"];
+    [h appendString:@"<table><thead><tr><th>应用</th><th>版本</th><th>信任</th><th>注册</th>"
+                    "<th>来源</th><th>cdhash</th><th></th></tr></thead><tbody id=tb>"];
+    [h appendString:tr];
+    [h appendString:@"</tbody></table>"];
+    [h appendString:@"<div style='margin-top:18px'>"
+                    "<button onclick=\"selfUpd()\" style='background:#238636'>更新自身</button>"
+                    "<span class=dim style='margin-left:12px;font-size:13px'>"
+                    "把新版 deb 的直链填进弹出的输入框（package: trollstore-lite-tv）</span></div>"];
+    [h appendFormat:@"<div id=log>就绪。已安装 %lu 个应用。</div>", (unsigned long)count];
+    [h appendString:@"<script>"
+        "const log=(t)=>{document.getElementById('log').textContent=t};"
+        "async function act(cmd,arg){log('执行 '+cmd+(arg?' '+arg:'')+' …');"
+        "const r=await fetch('/api/'+cmd+(arg?'?bid='+encodeURIComponent(arg):'')+'',{method:'POST'});"
+        "log(await r.text());setTimeout(()=>location.reload(),1200)}"
+        "async function selfUpd(){"
+        "const u=prompt('新版 deb 的 http 直链：','');if(!u)return;"
+        "log('正在下载并交给 dpkg…');"
+        "const r=await fetch('/api/selfupdate?url='+encodeURIComponent(u),{method:'POST'});"
+        "log(await r.text())}"
+        "async function upload(file){log('上传 '+file.name+' ('+file.size+' 字节)…');"
+        "const r=await fetch('/api/install?name='+encodeURIComponent(file.name),"
+        "{method:'POST',body:file});log(await r.text());setTimeout(()=>location.reload(),1500)}"
+        "const d=document.getElementById('drop'),inp=document.getElementById('f');"
+        "inp.onchange=e=>e.target.files[0]&&upload(e.target.files[0]);"
+        "['dragenter','dragover'].forEach(t=>d.addEventListener(t,e=>{e.preventDefault();"
+        "d.classList.add('hot')}));"
+        "['dragleave','drop'].forEach(t=>d.addEventListener(t,e=>{e.preventDefault();"
+        "d.classList.remove('hot')}));"
+        "d.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)upload(f)});"
+        "</script>"];
+    return h;
 }
 
 #pragma mark - 路由
