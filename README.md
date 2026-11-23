@@ -6,7 +6,7 @@
 [![CI](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml/badge.svg)](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> 当前版本 **2.0.5** · 目标平台 **tvOS 17.x + [Relaxin](docs/CREDITS.md)（roothide）越狱** · 许可证 **MIT**
+> 当前版本 **2.0.6** · 目标平台 **tvOS 17.x + [Relaxin](docs/CREDITS.md)（roothide）越狱** · 许可证 **MIT**
 
 > ⚠️ **非官方项目**：与 opa334 的 [TrollStore](https://github.com/opa334/TrollStore) /
 > TrollStore Lite **没有隶属关系**，也未复用其代码。名字里的 "TrollStore Lite" 仅表示

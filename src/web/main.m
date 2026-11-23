@@ -16,6 +16,8 @@
 #import <Foundation/Foundation.h>
 #import <fcntl.h>
 #import <unistd.h>
+#include <pthread.h>
+#include <stdint.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -93,9 +95,9 @@ static NSString *ATDaemon(NSString *command, int *rcOut) {
     NSString *outp = [run stringByAppendingPathComponent:[ident stringByAppendingString:@".out"]];
     NSString *rcp  = [run stringByAppendingPathComponent:[ident stringByAppendingString:@".rc"]];
 
-    for (int i = 0; i < 1800; i++) {   // 最多 180s（大 ipa 安装）
+    for (int i = 0; i < 9000; i++) {   // 20ms 粒度 × 9000 = 最多 180s（大 ipa 安装）
         if ([fm fileExistsAtPath:done]) break;
-        usleep(100 * 1000);
+        usleep(20 * 1000);
     }
     if (![fm fileExistsAtPath:done]) {
         if (rcOut) *rcOut = -1;
@@ -401,7 +403,19 @@ static NSData *HandleRequest(NSString *head, NSData *preBody, int fd) {
 
 #pragma mark - 主循环
 
+static void ServeConn(int fd);
+
+static void *ConnThread(void *arg) {
+    ServeConn((int)(intptr_t)arg);
+    return NULL;
+}
+
 static void ServeConn(int fd) {
+    // 半开/慢连接最多占用线程 30s，避免线程被无限拖住
+    struct timeval tv = { .tv_sec = 30, .tv_usec = 0 };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
     NSUInteger clen = 0;
     NSMutableData *pre = [NSMutableData data];
     NSString *head = ReadHeaders(fd, &clen, pre);
@@ -438,8 +452,13 @@ int main(int argc, char *argv[]) {
             socklen_t cl = sizeof(c);
             int fd = accept(s, (struct sockaddr *)&c, &cl);
             if (fd < 0) { if (errno == EINTR) continue; break; }
-            // tvOS SDK 禁用 fork，改为串行处理（家用工具足够；慢上传会短暂阻塞）
-            ServeConn(fd);
+            // tvOS SDK 禁用 fork；用 pthread 每连接一线程，避免一个大上传把整站堵住
+            pthread_t th;
+            if (pthread_create(&th, NULL, ConnThread, (void *)(intptr_t)fd) == 0) {
+                pthread_detach(th);
+            } else {
+                ServeConn(fd);   // 线程创建失败就退回串行
+            }
         }
         return 0;
     }

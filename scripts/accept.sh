@@ -11,7 +11,8 @@ IP="${1:-}"
 [ -n "$IP" ] || { echo "用法: $0 <设备IP>"; exit 2; }
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
-DEB=$(ls "$ROOT"/dist/trollstore-lite-tv_*.deb 2>/dev/null | head -1)
+# 取版本号最大的那个（ls 的字典序会把 2.0.10 排在 2.0.9 前面，且会把旧包当最新）
+DEB=$(ls "$ROOT"/dist/trollstore-lite-tv_*.deb 2>/dev/null | sort -V | tail -1)
 [ -n "$DEB" ] || { echo "先跑 ./build-deb.sh"; exit 1; }
 [ -n "${ATV_PASS:-}" ] || { echo "需要 ATV_PASS=<设备sudo密码>"; exit 1; }
 
