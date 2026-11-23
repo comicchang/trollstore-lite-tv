@@ -31,11 +31,11 @@ ATV_PASS='<设备sudo密码>' ./scripts/accept.sh 192.168.1.23     # 七步，�
 |---|---|---|---|
 | `lint` | ubuntu | shellcheck（warning 即失败）、可执行位、CRLF | 是 |
 | `test` | ubuntu | `tests/run.sh`（SDK 相关项自动跳过） | 是 |
-| `macOS full`（独立工作流，手动/tag 触发） | macos-14 | 完整测试（含 Mach-O 解析、demo ipa）+ 打包 | — |
+| `macOS full`（独立工作流，手动触发） | macos-14 | 完整测试（含 Mach-O 解析、demo ipa）+ 打包 | — |
 
 > macOS runner 需要账号有可用的 macOS 分钟，否则 job 会一直 `cancelled`——而且会把
 > 整个 run 标成 cancelled（徽章变红）。所以默认 CI 只跑 Linux，需要 SDK 的作业放在
-> `.github/workflows/macos.yml`，手动或打 tag 时触发。本地等价命令：
+> `.github/workflows/macos.yml`，手动触发。本地等价命令：
 > `./tests/run.sh && ./scripts/build-deb-local.sh`。
 > **发布**不用 CI 的 macOS runner，走本地一条命令：`./scripts/publish-release.sh`。
 

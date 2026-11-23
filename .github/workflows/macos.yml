@@ -1,5 +1,5 @@
 # 需要 tvOS SDK 的作业：完整测试 + 打包。
-# 手动触发，或打 tag 时触发。
+# 只在手动触发时运行（tag 推送不触发，避免 runner 不可用把 tag 标红）。
 #
 # 注意：这需要账号有可用的 macOS runner 分钟；没有的话 job 会被取消。
 # 本地等价命令：./tests/run.sh && ./scripts/build-deb-local.sh
@@ -7,8 +7,6 @@ name: macOS full
 
 on:
   workflow_dispatch:
-  push:
-    tags: ['v*']
 
 jobs:
   test-macos:
