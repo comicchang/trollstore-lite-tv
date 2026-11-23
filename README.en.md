@@ -53,6 +53,8 @@ the jailbreak, so a LaunchDaemon replays the manifest at every jailbreak startup
 
 All three share the same privileged engine, `tsltvd`. There is no second implementation.
 
+![TV UI](docs/images/tv-ui.png)
+
 ![Web store](docs/images/web-store.png)
 
 ---

@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 rm -rf TrollStoreLiteTV.app
 mkdir -p TrollStoreLiteTV.app
 clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -fobjc-arc \
-      -framework UIKit -framework Foundation \
+      -framework UIKit -framework Foundation -framework CoreGraphics -framework QuartzCore \
       -O2 main.m -o TrollStoreLiteTV.app/TrollStoreLiteTV
 cp Info.plist TrollStoreLiteTV.app/Info.plist
 

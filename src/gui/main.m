@@ -435,25 +435,31 @@ static NSArray<ATApp *> *ATProbe(void) {
     self.window.rootViewController = nav;
     [self.window makeKeyAndVisible];
 
+    [@"launched" writeToFile:[NSHomeDirectory() stringByAppendingPathComponent:@"tsltv-launch.txt"]
+                  atomically:YES encoding:NSUTF8StringEncoding error:nil];
+
     // 截图开关：设备上出现 /var/tmp/tsltv-screenshot 就把界面渲染成 PNG 写到
     // /var/tmp/tsltv-shot.png 再退出。用定时轮询而不是只在启动时判断——
     // 应用可能早被 launchd 拉起，事后才创建开关文件。
     self.shotTimer = [NSTimer scheduledTimerWithTimeInterval:2.0
                                                      repeats:YES
                                                        block:^(NSTimer *t) {
-        if (![[NSFileManager defaultManager] fileExistsAtPath:[[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"shot.flag"]]) return;
+        if (![[NSFileManager defaultManager] fileExistsAtPath:[NSHomeDirectory() stringByAppendingPathComponent:@"shot.flag"]]) return;
         [t invalidate];
         CGSize size = CGSizeMake(1920, 1080);
         UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:size];
         UIImage *img = [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
-            [self.window.rootViewController.view
-                drawViewHierarchyInRect:CGRectMake(0, 0, size.width, size.height)
-                     afterScreenUpdates:YES];
+            // renderInContext 已经把 UIKit 的坐标系翻好了，这里不能再翻
+            UIView *v = self.window.rootViewController.view;
+            CGRect b = v.bounds;
+            CGContextScaleCTM(ctx.CGContext,
+                              size.width / b.size.width, size.height / b.size.height);
+            [v.layer renderInContext:ctx.CGContext];
         }];
         NSData *png = UIImagePNGRepresentation(img);
-        BOOL ok = [png writeToFile:[NSTemporaryDirectory() stringByAppendingPathComponent:@"tsltv-shot.png"] atomically:YES];
+        BOOL ok = [png writeToFile:[NSHomeDirectory() stringByAppendingPathComponent:@"tsltv-shot.png"] atomically:YES];
         NSLog(@"shot: %@ (%lu bytes)", ok ? @"ok" : @"failed", (unsigned long)png.length);
-        [[NSFileManager defaultManager] removeItemAtPath:[[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"shot.flag"] error:nil];
+        [[NSFileManager defaultManager] removeItemAtPath:[NSHomeDirectory() stringByAppendingPathComponent:@"shot.flag"] error:nil];
         if (ok) exit(0);
     }];
 

@@ -49,6 +49,8 @@ ldid ad-hoc 双哈希签名  →  把该二进制的 sha256 cdhash 写进内核�
 
 三者共用同一个特权引擎 `tsltvd`，没有第二套逻辑。
 
+![电视界面](docs/images/tv-ui.png)
+
 ![网页商店](docs/images/web-store.png)
 
 ---
