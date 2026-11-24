@@ -120,8 +120,8 @@ if [ -d "$SDK" ]; then
     if [ -f "$IPA" ]; then
       ok "生成 $(basename "$IPA")"
       listing=$(unzip -l "$IPA" 2>/dev/null | awk '{print $4}')
-      case "$listing" in *Payload/TrollStoreLiteTVDemo.app/Info.plist*) ok "包含 Payload/TrollStoreLiteTVDemo.app/Info.plist" ;; *) bad "ipa 结构不对" ;; esac
-      case "$listing" in *Payload/TrollStoreLiteTVDemo.app/TrollStoreLiteTVDemo*) ok "包含主可执行" ;; *) bad "缺主可执行" ;; esac
+      case "$listing" in *Payload/TSLTVDemo.app/Info.plist*) ok "包含 Payload/TSLTVDemo.app/Info.plist" ;; *) bad "ipa 结构不对" ;; esac
+      case "$listing" in *Payload/TSLTVDemo.app/TSLTVDemo*) ok "包含主可执行" ;; *) bad "缺主可执行" ;; esac
       # 必须是未签名的
       if command -v codesign >/dev/null 2>&1; then
         if codesign -dv "$IPA" >/dev/null 2>&1; then bad "ipa 竟然带签名（应未签名）"; else ok "确认未签名"; fi
