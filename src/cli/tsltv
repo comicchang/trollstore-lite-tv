@@ -327,7 +327,13 @@ cmd_mods() { # list | apply <bundle-id> <dylib>
           _m=$(tr '\n' ' ' < "$_p/.tsltv-mods")
         else
           # 没有清单就退化为扫描，排除 Apple 自带的 libswift*
-          _m=$(ls "$_p/Frameworks" 2>/dev/null | grep '\.dylib$' | grep -v '^libswift' | tr '\n' ' ')
+          _m=""
+          for _d in "$_p"/Frameworks/*.dylib; do
+            [ -f "$_d" ] || continue
+            _n=${_d##*/}
+            case "$_n" in libswift*) continue ;; esac
+            _m="$_m$_n "
+          done
         fi
         [ -n "$_m" ] && printf '%-34s %s\n' "$_bid" "$_m"
       done < "$STATE"

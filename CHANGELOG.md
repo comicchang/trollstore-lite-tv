@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.4 — 2026-11-24
+
+- 修复 2.1.3 里 `mods list` 的写法：`continue;;`（无空格）在 bash 下是语法错误，
+  会导致整个 CLI 解析失败。改为标准写法并去掉 `ls | grep`（shellcheck 0 warning）
+
 ## 2.1.3 — 2026-11-24
 
 **mods 可用了**
