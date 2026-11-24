@@ -347,13 +347,15 @@ cmd_mods() { # list | apply <bundle-id> <dylib>
       _p=$(state_path "$_bid")
       [ -d "$_p" ] || die "记账里没有这个应用: $_bid"
       _exe=$(exe_of "$_p")
+      # modinject 是普通二进制（未打 vroot 补丁），要用 jbroot 下的真实路径
+      _real="$JB$_p"   # /Applications/... → <jbroot>/Applications/...
       [ -x "$_p/$_exe" ] || die "找不到主程序: $_p/$_exe"
 
       _name=$(basename "$_src")
       mkdir -p "$_p/Frameworks"
       cp "$_src" "$_p/Frameworks/$_name" || die "复制 dylib 失败"
       say "注入 @executable_path/Frameworks/$_name → $_exe"
-      "$BASE/modinject" "$_p/$_exe" "@executable_path/Frameworks/$_name" || die "注入失败（头部空隙不足？）"
+      "$BASE/modinject" "$_real/$_exe" "@executable_path/Frameworks/$_name" || die "注入失败（头部空隙不足？）"
 
       # 主程序与 dylib 都要重签 + 重新入信任缓存
       sign_one "$_p/$_exe" "" || die "主程序签名失败"

@@ -11,13 +11,14 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 BUILD="$HERE/.build"
 
-rm -rf "$BUILD"; mkdir -p "$BUILD/Payload/TrollStoreLiteTVDemo.app"
+rm -rf "$BUILD"; mkdir -p "$BUILD/Payload/TSLTVDemo.app"
 clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -fobjc-arc \
       -framework UIKit -framework Foundation -framework CoreGraphics \
-      -O2 "$HERE/main.m" -o "$BUILD/Payload/TrollStoreLiteTVDemo.app/TrollStoreLiteTVDemo"
-cp "$HERE/Info.plist" "$BUILD/Payload/TrollStoreLiteTVDemo.app/Info.plist"
+      -O2 "$HERE/main.m" -o "$BUILD/Payload/TSLTVDemo.app/TSLTVDemo"
+cp "$HERE/Info.plist" "$BUILD/Payload/TSLTVDemo.app/Info.plist"
 
 mkdir -p "$ROOT/dist"
+rm -f "$ROOT/dist/TSLTVDemo-unsigned.ipa"   # zip 会追加，必须先删
 ( cd "$BUILD" && zip -qr "$ROOT/dist/TSLTVDemo-unsigned.ipa" Payload )
 rm -rf "$BUILD"
 echo "产物: $ROOT/dist/TSLTVDemo-unsigned.ipa"

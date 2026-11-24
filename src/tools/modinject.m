@@ -8,12 +8,22 @@
 #import <Foundation/Foundation.h>
 #import <mach-o/loader.h>
 #import <mach-o/fat.h>
+#import <fcntl.h>
+#import <unistd.h>
+#import <errno.h>
 
 static uint32_t align8(uint32_t n) { return (n + 7) & ~7u; }
 
 static BOOL inject(NSString *bin, NSString *dylibPath, NSString **err) {
-    NSMutableData *data = [NSMutableData dataWithContentsOfFile:bin];
-    if (!data) { *err = @"读不到文件"; return NO; }
+    // 用 POSIX I/O：Foundation 的 writeToFile 在 vroot 路径上会报权限错误
+    int fd = open(bin.fileSystemRepresentation, O_RDWR);
+    if (fd < 0) { *err = [NSString stringWithFormat:@"打不开文件: %s", strerror(errno)]; return NO; }
+    off_t fsize = lseek(fd, 0, SEEK_END);
+    if (fsize <= 0) { close(fd); *err = @"文件为空"; return NO; }
+    lseek(fd, 0, SEEK_SET);
+    NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)fsize];
+    ssize_t got = read(fd, data.mutableBytes, (size_t)fsize);
+    if (got != fsize) { close(fd); *err = @"读文件失败"; return NO; }
 
     uint8_t *p = data.mutableBytes;
     uint32_t magic = *(uint32_t *)p;
@@ -69,7 +79,10 @@ static BOOL inject(NSString *bin, NSString *dylibPath, NSString **err) {
     mh->ncmds = ncmds + 1;
     mh->sizeofcmds = sizeofcmds + need;
 
-    if (![data writeToFile:bin atomically:YES]) { *err = @"写回失败"; return NO; }
+    lseek(fd, 0, SEEK_SET);
+    ssize_t put = write(fd, data.bytes, (size_t)fsize);
+    close(fd);
+    if (put != fsize) { *err = [NSString stringWithFormat:@"写回失败: %s", strerror(errno)]; return NO; }
     return YES;
 }
 

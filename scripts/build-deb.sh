@@ -95,6 +95,8 @@ sign_and_trust() {
 }
 sign_and_trust /usr/libexec/tsltv/tsltvweb com.trollstorelite.tv.web
 sign_and_trust /usr/libexec/tsltv/wake        com.trollstorelite.tv.wake
+sign_and_trust /usr/libexec/tsltv/modinject   com.trollstorelite.tv.modinject
+sign_and_trust /usr/libexec/tsltv/tsh         com.trollstorelite.tv.tsh
 sign_and_trust /Applications/TrollStoreLiteTV.app/TrollStoreLiteTV com.trollstorelite.tv
 rm -f "$ENT" "$ENT.one"
 
