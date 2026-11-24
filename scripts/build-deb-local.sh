@@ -55,11 +55,8 @@ Description: TrollStore-Lite-style installer for jailbroken tvOS (unofficial)
  CoreTrust exploit. Ships a TV UI, a web store and a CLI (tsltv).
 EOF
 
-# 复用 build-deb.sh 里同一份 postinst/prerm（保持两边一致）
-sed -n "/^cat > \"\$STAGE\/DEBIAN\/postinst\" <<'POSTINST'/,/^POSTINST$/p" \
-    "$HERE/build-deb.sh" | sed '1d;$d' > "$STAGE/DEBIAN/postinst"
-sed -n "/^cat > \"\$STAGE\/DEBIAN\/prerm\" <<'PRERM'/,/^PRERM$/p" \
-    "$HERE/build-deb.sh" | sed '1d;$d' > "$STAGE/DEBIAN/prerm"
+cp "$ROOT/scripts/package/postinst.sh" "$STAGE/DEBIAN/postinst"
+cp "$ROOT/scripts/package/prerm.sh" "$STAGE/DEBIAN/prerm"
 chmod 755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/prerm"
 chmod 644 "$STAGE/DEBIAN/control"
 chmod 755 "$STAGE/usr/libexec/tsltv/tsh" "$STAGE/usr/libexec/tsltv/wake"

@@ -75,5 +75,5 @@ tsltv install Foo-modded.ipa
 
 ## 现状
 
-- ✅ `tools/inject_dylib.py` 可用（已用 demo app 验证：`ncmds 24→25`，命令结构正确）
-- ❌ 还没有 mod 仓库 / 一键安装（下一步：`mods/<name>/manifest.json` + `tsltv mods apply`）
+- ✅ CLI 已包含 `tsltv mods list` / `tsltv mods apply`（2.1.3 起）。
+- ⚠️ 2.1.4 交接记录中的真机 `mods apply` 仍报 `EPERM`；2.1.5 真机复验待完成。当前没有 mod 仓库或一键目录安装。

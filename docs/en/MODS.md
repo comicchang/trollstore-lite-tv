@@ -79,7 +79,5 @@ JS injection is theoretically possible, but that requires a dedicated dylib call
 
 ## Status
 
-- ✅ `tools/inject_dylib.py` works (verified on the demo app: `ncmds 24→25`, command
-  structure validated)
-- ❌ no mod registry / one-click install yet (next: `mods/<name>/manifest.json` +
-  `tsltv mods apply`)
+- ✅ The CLI includes `tsltv mods list` and `tsltv mods apply` (since 2.1.3).
+- ⚠️ The v2.1.4 handover reports `EPERM` from device-side `mods apply`; a v2.1.5 device recheck is pending. There is still no mod registry or one-click catalog.

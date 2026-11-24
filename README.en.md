@@ -10,7 +10,7 @@ certificate required, no CoreTrust exploit required. Think of it as TrollStore L
 [![CI](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml/badge.svg)](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> Current version **2.1.0** · Target platform **tvOS 17.x + [Relaxin](docs/en/CREDITS.md) (roothide) jailbreak** · License **MIT**
+> Current version **2.1.5** · Target platform **tvOS 17.x + [Relaxin](docs/en/CREDITS.md) (roothide) jailbreak** · License **MIT**
 
 > ⚠️ **Unofficial project**: not affiliated with opa334's [TrollStore](https://github.com/opa334/TrollStore) /
 > TrollStore Lite, and it does not reuse their code. The words "TrollStore Lite" only indicate
@@ -48,7 +48,7 @@ the jailbreak, so a LaunchDaemon replays the manifest at every jailbreak startup
 | Entry point | Form | Best for |
 |---|---|---|
 | **TV UI** `TrollStoreLiteTV.app` | Home-screen app: list / install / install folder / verify / uninstall | Using the remote from the couch |
-| **Web store** `http://<device-ip>:8787` | Drag an ipa into the browser and it installs | Installing things from a computer |
+| **Web store** `http://<device-ip>:8787` | Drag an ipa into the browser to install | Installing things from a computer |
 | **CLI** `tsltv` (aliases `trollstore-lite-tv`, `tsl`) | Scripting, batches, troubleshooting | SSH / automation |
 
 All three share the same privileged engine, `tsltvd`. There is no second implementation.
@@ -94,8 +94,8 @@ Neither artifact contains any Apple signing material — signing happens on the 
 ## Testing
 
 ```sh
-./tests/run.sh          # no device needed: 36 assertions (syntax / plist / usage / injection blocking / precheck verdicts / Mach-O parsing / demo ipa)
-ATV_PASS=... ./scripts/accept.sh <ip>   # needs a device: install / verify / launch / uninstall in seven steps
+./tests/run.sh          # no device needed: 42 assertions (syntax / plist / usage / injection blocking / uninstall origin / precheck / Mach-O / demo ipa / mod inject)
+ATV_PASS=... ./scripts/accept.sh <ip>   # needs a device: install / verify / launch / uninstall
 ```
 
 CI covers shellcheck, the unit tests, local packaging and tag-triggered releases; see [docs/en/TESTING.md](docs/en/TESTING.md).

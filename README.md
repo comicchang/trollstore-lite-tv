@@ -10,7 +10,7 @@
 [![CI](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml/badge.svg)](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> 当前版本 **2.1.0** · 目标平台 **tvOS 17.x + [Relaxin](docs/zh/CREDITS.md)（roothide）越狱** · 许可证 **MIT**
+> 当前版本 **2.1.5** · 目标平台 **tvOS 17.x + [Relaxin](docs/zh/CREDITS.md)（roothide）越狱** · 许可证 **MIT**
 
 > ⚠️ **非官方项目**：与 opa334 的 [TrollStore](https://github.com/opa334/TrollStore) /
 > TrollStore Lite **没有隶属关系**，也未复用其代码。名字里的 "TrollStore Lite" 仅表示
@@ -89,8 +89,8 @@ open http://192.168.1.23:8787     # 把 ipa 拖进去
 ## 测试
 
 ```sh
-./tests/run.sh          # 不需要设备：36 条断言（语法/plist/用法/注入拦截/预检判定/Mach-O 解析/demo ipa）
-ATV_PASS=... ./scripts/accept.sh <ip>   # 需要设备：装/验/启/卸 七步
+./tests/run.sh          # 不需要设备：42 条断言（语法/plist/用法/注入拦截/卸载护栏/预检判定/Mach-O 解析/demo ipa/mod 注入）
+ATV_PASS=... ./scripts/accept.sh <ip>   # 需要设备：装/验/启/卸闭环
 ```
 
 CI 覆盖 shellcheck、单元测试、本地打包与 tag 触发的 Release，见 [docs/TESTING.md](docs/zh/TESTING.md)。

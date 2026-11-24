@@ -53,7 +53,7 @@ ssh mobile@192.168.1.23 'sudo dpkg -i /var/tmp/trollstore-lite-tv_<ver>_appletvo
 
 `postinst` performs four steps, none of them optional (rationale in [ARCHITECTURE](ARCHITECTURE.md)):
 
-1. **Re-sign** `tsltvweb` / `wake` / `TrollStoreLiteTV.app` (`dpkg` overwrites the files and drops the signature applied at package build time)
+1. **Re-sign Mach-O files** including `tsltvweb`, `wake`, `modinject` and the `TrollStoreLiteTV.app` executable. `tsh` is a shell script and is not passed to ldid.
 2. Write their cdhashes, and the app's, into the **kernel trust cache**
 3. `uicache -p` to register the TV app and create the `/usr/bin/{tsltv,trollstore-lite-tv,tsl}` aliases
 4. Start three LaunchDaemons: `tsltvd` (engine), `tsltvweb` (web), `com.trollstorelite.tv.retrust` (replays trust at boot)
@@ -182,6 +182,7 @@ sudo dpkg -r trollstore-lite-tv
 
 `prerm` stops the three daemons, unregisters the TV app and removes the aliases in `/usr/bin`.
 It does **not** delete the other apps you installed (they live in `/Applications` and are not in dpkg's manifest).
+It also preserves pending ipa files in `/var/tmp/tsltv-inbox`.
 
 ---
 

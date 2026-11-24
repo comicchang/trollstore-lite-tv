@@ -697,6 +697,8 @@ cmd_uninstall() {
   if ! state_has "$bid"; then
     die "$bid 不是本工具安装的，拒绝卸载（保护系统应用）"
   fi
+  origin=$(state_origin "$bid")
+  [ "$origin" = install ] || die "$bid 的来源为 ${origin:-未知}，只允许卸载 origin=install 的应用"
   path=$(state_path "$bid")
   say "==> 卸载 $bid"
   say "    $path"

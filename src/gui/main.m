@@ -260,7 +260,7 @@ static NSArray<ATApp *> *ATProbe(void) {
         self.view.window.isKeyWindow, self.view.window.isHidden, self.view.window.alpha,
         (long)self.view.window.windowScene.activationState,
         (long)[UIApplication sharedApplication].applicationState,
-        @"(见表格)", ATRunDir()];
+        ATRunDir()];
     [info writeToFile:@"/var/tmp/tsltv-ui.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 

@@ -53,8 +53,8 @@ ssh mobile@192.168.1.23 'sudo dpkg -i /var/tmp/trollstore-lite-tv_<ver>_appletvo
 
 `postinst` 会做四件**缺一不可**的事（原因见 [ARCHITECTURE](ARCHITECTURE.md)）：
 
-1. 给 `tsltvweb` / `wake` / `TrollStoreLiteTV.app` **重新签名**（`dpkg` 覆盖文件会丢掉打包时的签名）
-2. 把它们与 App 的 cdhash 写入**内核信任缓存**
+1. 给 `tsltvweb` / `wake` / `modinject` / `TrollStoreLiteTV.app` 主可执行等 **Mach-O 文件重新签名**。`tsh` 是 shell 脚本，不交给 ldid。
+2. 把这些 Mach-O 与 App 的 cdhash 写入**内核信任缓存**
 3. `uicache -p` 注册电视应用，建立 `/usr/bin/{tsltv,trollstore-lite,tsl}` 别名
 4. 启动三个 LaunchDaemon：`tsltvd`（引擎）、`tsltvweb`（网页）、`com.trollstorelite.tv.retrust`（开机重放信任）
 
@@ -182,6 +182,7 @@ sudo dpkg -r trollstore-lite-tv
 
 `prerm` 会停掉三个守护进程、注销电视应用、删除 `/usr/bin` 里的别名。
 **不会**删除你装的其它应用（它们在 `/Applications` 里，且不在 dpkg 的清单内）。
+卸载还会保留 `/var/tmp/tsltv-inbox` 中尚未安装的 IPA。
 
 ---
 

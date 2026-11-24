@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.5 — 2026-11-24
+
+- 卸载只允许 `origin=install`；`adopt` 与来源缺失的旧条目拒绝删除。
+- 将 postinst/prerm 独立为共享脚本；签名、trustcache 或 LaunchDaemon 启动失败会让安装明确失败，并为 trustcache 注入补充 `/var/tmp` 路径回退。
+- 修复设备 ldid 拒绝 shell 脚本 `tsh`（`Unknown header magic`）：只对 Mach-O helper 和 app 主程序签名。
+- 修复升级路径 `prerm` 提前停服和删软链的问题，卸载软件包时保留用户的 `/var/tmp/tsltv-inbox` 投递文件。
+- 新增卸载来源回归覆盖（42 条断言），同步版本与文档。
+- 修复电视界面自截图状态文本的格式参数错位，确保 `runDir` 显示实际 FIFO 目录。
+
+
 ## 2.1.4 — 2026-11-24
 
 - 修复 2.1.3 里 `mods list` 的写法：`continue;;`（无空格）在 bash 下是语法错误，

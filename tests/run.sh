@@ -4,8 +4,8 @@
 #   ./tests/run.sh            # 全部跑一遍
 #   ./tests/run.sh -v         # 打印每条断言
 #
-# 覆盖：脚本语法、plist 合法性、参数与用法、命令注入拦截、Mach-O 解析、
-#       安装前判定（加密包 / iOS 包 / minOS）、demo ipa 产物结构。
+# 覆盖：脚本语法、plist 合法性、参数与用法、命令注入拦截、卸载来源护栏、Mach-O 解析、
+#       安装前判定（加密包 / iOS 包 / minOS）、demo ipa 产物结构、mod 注入。
 # 需要设备的端到端验收在 scripts/accept.sh。
 
 set -u
@@ -33,7 +33,8 @@ expect_rc() { # <期望码> <描述> <命令...>
 # ---------------------------------------------------------------- 1. 语法
 group "脚本语法"
 for f in "$CLI" "$ROOT/src/daemon/tsltvd" "$ROOT/src/daemon/retrust.sh" \
-         "$ROOT/src/fork/tsh" "$ROOT"/scripts/*.sh "$ROOT"/src/*/build.sh; do
+         "$ROOT/src/fork/tsh" "$ROOT"/scripts/*.sh "$ROOT"/scripts/package/*.sh \
+         "$ROOT"/src/*/build.sh; do
   [ -f "$f" ] || continue
   if sh -n "$f" 2>/dev/null; then ok "语法 $(basename "$f")"; else bad "语法 $(basename "$f")"; fi
 done
@@ -74,6 +75,46 @@ group "命令注入拦截"
 expect_rc 1 "remote 拒绝分号" "$CLI" remote 'list; rm -rf /'
 expect_rc 1 "remote 拒绝管道" "$CLI" remote 'list | cat'
 expect_rc 1 "remote 拒绝反引号" "$CLI" remote 'list `id`'
+
+# ---------------------------------------------------------------- 4b. 卸载来源护栏
+group "卸载来源护栏"
+TEST_ROOT="$TMP/uninstall-root"
+TEST_CLI="$TEST_ROOT/usr/libexec/tsltv/tsltv"
+mkdir -p "$(dirname "$TEST_CLI")" "$TMP/fakebin" "$TMP/apps/adopt" "$TMP/apps/install"
+cp "$CLI" "$TEST_CLI"
+cat > "$TMP/fakebin/id" <<'EOF'
+#!/bin/sh
+echo 0
+EOF
+cat > "$TMP/fakebin/uicache" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$TMP/fakebin/id" "$TMP/fakebin/uicache"
+printf 'com.example.adopt\t%s\tdeadbeef\t2026-01-01 00:00:00\tadopt\n' \
+  "$TMP/apps/adopt" > "$TEST_ROOT/usr/libexec/tsltv/installed.tsv"
+printf 'com.example.install\t%s\tdeadbeef\t2026-01-01 00:00:00\tinstall\n' \
+  "$TMP/apps/install" >> "$TEST_ROOT/usr/libexec/tsltv/installed.tsv"
+PATH="$TMP/fakebin:$PATH" "$TEST_CLI" uninstall com.example.adopt > "$TMP/adopt.out" 2>&1
+rc=$?
+if [ "$rc" -eq 1 ] && [ -d "$TMP/apps/adopt" ] && \
+   awk -F '\t' '$1=="com.example.adopt" && $5=="adopt"{found=1} END{exit !found}' \
+     "$TEST_ROOT/usr/libexec/tsltv/installed.tsv"; then
+  ok "adopt 应用拒绝卸载并保留目录与清单"
+else
+  bad "adopt 应用未受卸载护栏保护"
+  printf '    rc=%s 输出=%s\n' "$rc" "$(cat "$TMP/adopt.out")"
+fi
+PATH="$TMP/fakebin:$PATH" "$TEST_CLI" uninstall com.example.install > "$TMP/install.out" 2>&1
+rc=$?
+if [ "$rc" -eq 0 ] && [ ! -e "$TMP/apps/install" ] && \
+   ! awk -F '\t' '$1=="com.example.install"{found=1} END{exit !found}' \
+     "$TEST_ROOT/usr/libexec/tsltv/installed.tsv"; then
+  ok "本工具安装的应用仍可正常卸载"
+else
+  bad "本工具安装的应用卸载失败"
+  printf '    rc=%s 输出=%s\n' "$rc" "$(cat "$TMP/install.out")"
+fi
 
 # ---------------------------------------------------------------- 5. 预检判定
 group "安装前判定（纯函数）"
