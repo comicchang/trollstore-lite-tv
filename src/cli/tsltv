@@ -584,6 +584,14 @@ cmd_install() {
 
   signed=0; trusted=0; failed=0
   # 遍历所有嵌套 Mach-O（主可执行 / Frameworks / PlugIns / appex）
+  # App Store 包（尤其解密后的 ipa）会带 SC_Info / _CodeSignature。
+  # 这些是 FairPlay 的元数据，留着会让 LaunchServices 直接拒绝注册
+  # （uicache: "Unable to register"），必须在签名前清掉。
+  rm -rf "$dest/SC_Info" "$dest/_CodeSignature" 2>/dev/null || true
+  # /Applications 下的应用需要可读可执行，否则注册也可能被拒
+  chmod 755 "$dest" 2>/dev/null || true
+  chmod 755 "$dest/"*.app 2>/dev/null || true
+
   find "$dest" -type f > "$WORK/machos.list" 2>/dev/null
   while IFS= read -r _mf; do
     [ -L "$_mf" ] && continue

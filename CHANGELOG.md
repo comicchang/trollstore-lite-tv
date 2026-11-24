@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.2 — 2026-11-24
+
+**安装器修复 + mods 原型**
+
+- **修复**：安装 App Store 解密包后无法注册（`uicache: Unable to register`）。
+  根因是包内残留 `SC_Info` / `_CodeSignature`（FairPlay 元数据），
+  LaunchServices 因此拒绝登记。安装流程现在会在签名前清理它们并修正权限
+- 新增 `tools/inject_dylib.py`：向 Mach-O 就地插入 `LC_LOAD_DYLIB`，
+  用于原生 dylib mod（机制同 TrollFools）。已在 demo 上验证（`ncmds 24→25`）
+- 新增 `docs/zh/MODS.md` 与 `docs/en/MODS.md`
+
 ## 2.1.1 — 2026-11-24
 
 **按评审意见修的一批真问题**
