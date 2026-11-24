@@ -8,11 +8,7 @@
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleIcons</key>
 <dict>
-  <key>CFBundlePrimaryIcon</key>
-  <dict>
-    <key>CFBundleIconName</key><string>AppIcon</string>
-    <key>CFBundleIconFiles</key><array><string>AppIcon</string></array>
-  </dict>
+  <key>CFBundlePrimaryIcon</key><string>AppIconSmall</string>
 </dict>
 <key>CFBundleShortVersionString</key><string>1.0.7</string>
 <key>CFBundleVersion</key><string>1</string>

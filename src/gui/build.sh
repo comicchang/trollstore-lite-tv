@@ -12,13 +12,13 @@ cp Info.plist TrollStoreLiteTV.app/Info.plist
 
 # 图标：tvOS 的图标来自 brandassets，必须编成 Assets.car
 if [ -d Assets.xcassets ]; then
-  if [ ! -f "Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon - Small.imagestack/Back.imagestacklayer/Content.imageset/Back.png" ]; then
-    swift make-icon.swift >/dev/null 2>&1 || echo "警告: 图标素材生成失败"
+  if [ ! -f "Assets.xcassets/AppIcon.brandassets/AppIconSmall.imagestack/Back.imagestacklayer/Content.imageset/Back.png" ]; then
+    (cd ../.. && swift src/gui/make-icon.swift >/dev/null 2>&1) || echo "警告: 图标素材生成失败"
   fi
   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   actool --compile TrollStoreLiteTV.app --platform appletvos \
          --minimum-deployment-target 17.0 --target-device tv \
-         --app-icon "App Icon & Top Shelf Image" \
+         --app-icon "AppIcon" \
          --output-partial-info-plist .icon.plist \
          Assets.xcassets >/dev/null 2>&1 \
     && echo "图标: Assets.car $(du -h TrollStoreLiteTV.app/Assets.car | cut -f1)" \

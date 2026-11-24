@@ -13,7 +13,7 @@ import CoreGraphics
 import Foundation
 
 let root = "src/gui/Assets.xcassets"
-let brand = "\(root)/App Icon & Top Shelf Image.brandassets"
+let brand = "\(root)/AppIcon.brandassets"
 
 func color(_ hex: UInt32, _ a: CGFloat = 1) -> CGColor {
     CGColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
@@ -95,14 +95,14 @@ writeJSON("\(root)/Contents.json", ["info": ["author": "xcode", "version": 1]])
 let fm = FileManager.default
 try? fm.createDirectory(atPath: brand, withIntermediateDirectories: true)
 
-struct Size { let name: String; let w: Int; let h: Int }
-let sizes = [Size(name: "App Icon - Small", w: 400, h: 240),
-             Size(name: "App Icon - Large", w: 1280, h: 768)]
+struct Size { let name: String; let role: String; let sz: String; let w: Int; let h: Int }
+let sizes = [Size(name: "AppIconSmall", role: "primary-app-icon", sz: "400x240", w: 400, h: 240),
+             Size(name: "AppIconLarge", role: "primary-app-icon", sz: "1280x768", w: 1280, h: 768)]
 
 var brandAssets: [[String: String]] = []
 for s in sizes {
     let stack = "\(brand)/\(s.name).imagestack"
-    brandAssets.append(["filename": "\(s.name).imagestack", "idiom": "tv"])
+    brandAssets.append(["filename": "\(s.name).imagestack", "idiom": "tv", "role": s.role, "size": s.sz])
     try? fm.createDirectory(atPath: stack, withIntermediateDirectories: true)
 
     var layers: [[String: String]] = []

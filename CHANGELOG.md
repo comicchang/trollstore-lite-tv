@@ -8,6 +8,8 @@
 - 修复升级路径 `prerm` 提前停服和删软链的问题，卸载软件包时保留用户的 `/var/tmp/tsltv-inbox` 投递文件。
 - 新增卸载来源回归覆盖（42 条断言），同步版本与文档。
 - 修复电视界面自截图状态文本的格式参数错位，确保 `runDir` 显示实际 FIFO 目录。
+- 修复 `src/cli/tsltv` 安装权限（`chmod -R a+rX`）与 GPU entitlements（`com.apple.security.iokit-user-client-class`，解决 YouTube TV Cobalt 等 OpenGL ES / Metal 应用因 `EAGLContext initWithAPI:3` 返回 `nil` 崩溃）。
+- 修复 `TrollStoreLiteTV.app` 的 tvOS 图标格式（`brandassets` `role=primary-app-icon` + `CFBundlePrimaryIcon=AppIconSmall`），解决主屏不显示图标。
 
 
 ## 2.1.4 — 2026-11-24
