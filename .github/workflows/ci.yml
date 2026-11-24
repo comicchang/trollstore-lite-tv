@@ -34,9 +34,8 @@ jobs:
           fi
           echo OK
 
-  # Linux 覆盖"不依赖 tvOS SDK"的部分：语法 / plist / 用法 / 注入拦截 / 预检判定。
-  # 需要 SDK 的 Mach-O 解析与 demo ipa 在 macos.yml（手动触发）里跑。：语法 / plist / 用法 / 注入拦截 / 预检判定。
-  # 需要 SDK 的 Mach-O 解析与 demo ipa 构建会自动跳过（见 tests/run.sh）。
+  # Linux 覆盖"不依赖 tvOS SDK"的部分：语法 / plist / 用法 / 注入拦截 / 卸载护栏 / 预检判定。
+  # 需要 SDK 的 Mach-O 解析与 demo ipa 构建会自动跳过（见 tests/run.sh），在 macos.yml 中运行。
   test:
     name: 单元测试（Linux）
     runs-on: ubuntu-latest

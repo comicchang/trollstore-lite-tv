@@ -70,12 +70,21 @@ tsltv install Foo-modded.ipa
 | No DRM apps | a decrypted App Store app still needs FairPlay keys; a mod cannot fix that |
 | Stability | a crashing mod crashes the app; there is no sandbox isolation |
 
-## Difference from userscripts
+## Difference from userscripts & Cobalt injection path
 
 Tampermonkey scripts are JS running inside a page. A mod here is **native code inside
-the process** — more capable and more dangerous. If the target app embeds a WKWebView,
-JS injection is theoretically possible, but that requires a dedicated dylib calling
-`evaluateJavaScript`; it is not part of the default tooling.
+the process** — more capable and more dangerous.
+
+For web-shell apps such as YouTube TV (`YouTubeUnstable`), binary inspection confirms it
+does **not** use Apple's `WKWebView`/`UIWebView` — it runs Google's **Cobalt + Starboard + V8**
+HTML5 engine loading `https://www.youtube.com/tv`. Therefore:
+
+- Standard ObjC `WKWebView` swizzling has no effect on YouTube TV;
+- Tampermonkey-style JS userscript injection works by hooking Cobalt's C++ script loader
+  and CSP parser (`HTMLScriptElement::Execute` + `DirectiveList::AddDirective`) to whitelist
+  script origins and inject a userscript loader (for example `Exaphis/mutube` + `TizenTube Cobalt`
+  for ad-blocking, SponsorBlock, and 4K fixes on YouTube 4.54.01, then permanently installed
+  via `tsltv` without 7-day resigning).
 
 ## Status
 

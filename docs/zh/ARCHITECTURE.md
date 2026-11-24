@@ -21,6 +21,7 @@ ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   → 
 | **双哈希签名** | 只签 sha1 或只签 sha256 会导致进程秒退，且没有任何日志 |
 | **`get-task-allow`** | 少了它进程会被判"invalid code pages"直接杀。同时需要 `platform-application`、`no-sandbox`、`no-container` |
 | **`application-identifier` 与 bundle id 一致** | 用 A 的 entitlement 签 B 会被静默拒绝 |
+| **GPU IOKit entitlements**（OpenGL ES / Metal 应用） | 缺少 `com.apple.security.iokit-user-client-class`（`AGX*` / `IOAccel*` / `IOSurfaceRootUserClient`）会导致 `EAGLContext` 初始化返回 `nil`；`tsltv` 2.1.5 起已自动签入 |
 
 > 例外：越狱自带的应用（例如 irisin）走 Relaxin 自己的签名通道，没有 `get-task-allow`
 > 也能跑。`tsltv verify` 因此按 `origin=install|adopt` 区分规则。

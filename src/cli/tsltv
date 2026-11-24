@@ -44,7 +44,7 @@ elif [ ! -d "$BASE" ] && [ -d "$JB/usr/libexec/tsltv" ]; then
   BASE=$JB/usr/libexec/tsltv
 fi
 STATE=$BASE/installed.tsv
-WORK=/var/tmp/tsltv.work
+WORK=/var/tmp/tsltv.work.$$
 
 die() { printf '错误: %s\n' "$*" >&2; exit 1; }
 # 调试用：TrollStoreLiteTV_TRACE=1 时把各阶段耗时写到 stderr
@@ -102,12 +102,18 @@ need_jb() {
 
 trust_one() { # <macho>
   _p="$1"
-  if "$JBCTL" trustcache add "$_p" >/dev/null 2>&1; then
-    return 0
-  fi
-  _t=$WORK/trustsink
+  # /Applications 与 jbroot 路径在 roothide 下命中 jbctl 路径黑名单，直接绕道 /var/tmp 省一次无效调用
+  case "$_p" in
+    /Applications/*|/var/containers/Bundle/Application/*) ;;
+    *)
+      if "$JBCTL" trustcache add "$_p" >/dev/null 2>&1; then
+        return 0
+      fi
+      ;;
+  esac
+  _t="$WORK/ts.${2:-$$}"
   rm -rf "$_t"; mkdir -p "$_t"
-  cp "$_p" "$_t/bin" || return 1
+  cp "$_p" "$_t/bin" || { rm -rf "$_t"; return 1; }
   if "$JBCTL" trustcache add "$_t/bin" >/dev/null 2>&1; then
     rm -rf "$_t"; return 0
   fi
@@ -129,6 +135,14 @@ _plist_sed() { # <file> <key>
 }
 
 _plist_get() { # <plist> <key>
+  # tvOS 上的 Procursus plutil 直接支持 -key，免复制/转码/sed，且完全不受并发临时目录影响
+  if command -v plutil >/dev/null 2>&1; then
+    _v=$(plutil -key "$2" "$1" 2>/dev/null)
+    if [ -n "$_v" ]; then
+      printf '%s\n' "$_v"
+      return 0
+    fi
+  fi
   _v=$(_plist_sed "$1" "$2")
   [ -n "$_v" ] && { printf '%s\n' "$_v"; return 0; }
   command -v plutil >/dev/null 2>&1 || return 1
@@ -485,17 +499,14 @@ cmd_probe() {
     fi
     reg=$(printf '%s' "$_ui" | grep -c -- "$bid")
     [ "$reg" -ge 1 ] && reg=1 || reg=0
-    # 一次转换取两个字段（每个 app 各转一次会比逐个 key 快好几倍）
-    _p="$path/Info.plist"; _x="$WORK/probe.plist"
-    rm -f "$_x"; cp "$_p" "$_x" 2>/dev/null && plutil -convert xml1 "$_x" >/dev/null 2>&1
-    _src="$_x"; [ -f "$_src" ] || _src="$_p"
-    nm=$(_plist_sed "$_src" CFBundleDisplayName)
-    [ -n "$nm" ] || nm=$(_plist_sed "$_src" CFBundleName)
+    nm=$(_plist_get "$path/Info.plist" CFBundleDisplayName)
+    [ -n "$nm" ] || nm=$(_plist_get "$path/Info.plist" CFBundleName)
     [ -n "$nm" ] || nm=$bid
-    ver=$(_plist_sed "$_src" CFBundleShortVersionString)
+    ver=$(_plist_get "$path/Info.plist" CFBundleShortVersionString)
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$bid" "$path" "${cd2:-?}" "$trusted" "$reg" "${origin:-install}" "$nm" "${ver:--}"
   done < "$STATE"
+  rm -rf "$WORK" 2>/dev/null || true
 }
 
 # 把已经安装、但不在记账里的 app 纳入管理（不重新签名）
@@ -624,12 +635,14 @@ cmd_install() {
   trace "work-reset"
   rm -rf "$WORK"; mkdir -p "$WORK"
 
+  _from_ipa=0
   case "$src" in
     *.ipa|*.tipa)
       command -v unzip >/dev/null 2>&1 || die "缺 unzip"
       unzip -q -o "$src" -d "$WORK/unpack" || die "解包失败"
       app=$(ls -d "$WORK"/unpack/Payload/*.app 2>/dev/null | head -1)
       [ -n "$app" ] || die "IPA 里没有 Payload/*.app"
+      _from_ipa=1
       ;;
     *.app) app=$src ;;
     *) die "只接受 .app / .ipa / .tipa" ;;
@@ -661,7 +674,12 @@ cmd_install() {
   say "    目标: $dest"
 
   rm -rf "$dest"
-  cp -a "$app" "$dest" || die "复制失败"
+  # 同卷 APFS 直接 mv 到 jbroot/Applications（O(1) 瞬间完成），避免把上万文件再复制一遍
+  if [ "$_from_ipa" -eq 1 ] && [ -n "$JB" ] && [ -d "$JB/Applications" ] && mv "$app" "$JB$dest" 2>/dev/null; then
+    :
+  else
+    cp -a "$app" "$dest" || die "复制失败"
+  fi
   trace "copied"
 
   gen_ent "$bid" "$WORK/ent.plist"
@@ -675,17 +693,54 @@ cmd_install() {
   # /Applications 下的应用及全部子目录需要 mobile 可读可执行，否则启动时读不到 .lproj / Frameworks
   chmod -R a+rX "$dest" 2>/dev/null || true
 
-  find "$dest" -type f > "$WORK/machos.list" 2>/dev/null
-  while IFS= read -r _mf; do
-    [ -L "$_mf" ] && continue
-    is_macho "$_mf" || continue
-    if sign_one "$_mf" "$WORK/ent.plist"; then
-      signed=$((signed+1))
-      if trust_one "$_mf"; then trusted=$((trusted+1)); else failed=$((failed+1)); fi
+  # 优先用单进程 C 扫描器 machoscan（Kodi 12000+ 文件 <0.1s，避免 shell 逐文件 fork 耗时十几分钟）
+  : > "$WORK/machos.list"
+  if [ -x "$BASE/machoscan" ]; then
+    if [ -n "$JB" ] && [ -d "$JB$dest" ]; then
+      "$BASE/machoscan" "$JB$dest" "$dest" > "$WORK/machos.list" 2>/dev/null || true
     else
-      failed=$((failed+1))
+      "$BASE/machoscan" "$dest" "$dest" > "$WORK/machos.list" 2>/dev/null || true
+    fi
+  else
+    find "$dest" -type f 2>/dev/null | while IFS= read -r _mf; do
+      [ -L "$_mf" ] && continue
+      is_macho "$_mf" && printf '%s\n' "$_mf"
+    done > "$WORK/machos.list"
+  fi
+  trace "scanned"
+
+  # 多 Mach-O（如 Kodi 含 150+ dylib）4 路并发签名 + 入信任缓存
+  mkdir -p "$WORK/st"
+  _idx=0; _jobs=0
+  while IFS= read -r _mf; do
+    [ -n "$_mf" ] || continue
+    _idx=$((_idx+1))
+    (
+      if sign_one "$_mf" "$WORK/ent.plist"; then
+        if trust_one "$_mf" "$_idx"; then
+          echo "st" > "$WORK/st/$_idx"
+        else
+          echo "sf" > "$WORK/st/$_idx"
+        fi
+      else
+        echo "ff" > "$WORK/st/$_idx"
+      fi
+    ) &
+    _jobs=$((_jobs+1))
+    if [ "$_jobs" -ge 4 ]; then
+      wait
+      _jobs=0
     fi
   done < "$WORK/machos.list"
+  wait
+  for _sf in "$WORK/st"/*; do
+    [ -f "$_sf" ] || continue
+    case "$(cat "$_sf" 2>/dev/null)" in
+      st) signed=$((signed+1)); trusted=$((trusted+1)) ;;
+      sf) signed=$((signed+1)); failed=$((failed+1)) ;;
+      *)  failed=$((failed+1)) ;;
+    esac
+  done
 
   trace "signed-trusted n=$signed/$trusted"
   uicache -p "$dest" >/dev/null 2>&1
@@ -694,6 +749,7 @@ cmd_install() {
   exe="$dest/$exe_name"
   cd=$(cdhash_of "$exe")
   state_add "$bid" "$dest" "$cd" install
+  rm -rf "$WORK" 2>/dev/null || true
 
   say "==> 签名 $signed / 信任 $trusted / 失败 $failed"
   say "==> 完成: $dest"

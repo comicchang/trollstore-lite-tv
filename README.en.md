@@ -94,7 +94,7 @@ Neither artifact contains any Apple signing material — signing happens on the 
 ## Testing
 
 ```sh
-./tests/run.sh          # no device needed: 42 assertions (syntax / plist / usage / injection blocking / uninstall origin / precheck / Mach-O / demo ipa / mod inject)
+./tests/run.sh          # no device needed: 44 assertions (syntax / plist / usage / injection blocking / uninstall origin / precheck / Mach-O / demo ipa & icon / mod inject)
 ATV_PASS=... ./scripts/accept.sh <ip>   # needs a device: install / verify / launch / uninstall
 ```
 

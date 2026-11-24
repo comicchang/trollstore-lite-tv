@@ -49,18 +49,18 @@ CI 的 `package` job 用的就是这条路径（`--root-owner-group` 保证包�
 ## 发布新版本
 
 ```sh
-# 有设备：直接在设备上打包并上传
-ATV_IP=192.168.1.23 ATV_PASS='<设备sudo密码>' ./scripts/publish-release.sh v2.0.4
+# 一条命令本地打包并创建 GitHub Release（无需连接设备）
+./scripts/publish-release.sh v2.1.5 dist/RELEASE-NOTES-v2.1.5.md
 
-# 没设备：本地出包，再手工上传
+# 或手工分步
 ./scripts/build-deb-local.sh && ./examples/hello-tvos/build.sh
-gh release create v2.0.4 dist/*.deb dist/TSLTVDemo-unsigned.ipa --generate-notes
+gh release create v2.1.5 dist/trollstore-lite-tv_2.1.5_appletvos-arm64e.deb dist/TSLTVDemo-unsigned.ipa --notes-file dist/RELEASE-NOTES-v2.1.5.md
 ```
 
 它会：
 
-1. 在设备上重新打 `.deb`（`dist/trollstore-lite-tv_<ver>_appletvos-arm64e.deb`）
-2. 构建无签名 demo ipa（`dist/TSLTVDemo-unsigned.ipa`）
+1. 本地构建 `.deb`（`dist/trollstore-lite-tv_<ver>_appletvos-arm64e.deb`）
+2. 构建带 tvOS 图标的无签名 demo ipa（`dist/TSLTVDemo-unsigned.ipa`）
 3. 创建 GitHub Release 并上传这两个产物
 
 ## Release 里应该有什么

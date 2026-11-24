@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <signal.h>
@@ -203,10 +204,16 @@ static NSString *TVCachedVersion(void) {
     static time_t at = 0;
     time_t now = time(NULL);
     if (cached && (now - at) < 60) return cached;
-    int rc = 0;
-    NSString *v = [ATDaemon(@"version", &rc) stringByTrimmingCharactersInSet:
-                   [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    cached = (v.length && rc == 0) ? v : @"unknown";
+    NSString *verPath = [[CLIPath() stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"VERSION"];
+    NSString *v = [[NSString stringWithContentsOfFile:verPath encoding:NSUTF8StringEncoding error:nil]
+                   stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (v.length == 0) {
+        int rc = 0;
+        v = [ATDaemonTimeout(@"version", 5, &rc) stringByTrimmingCharactersInSet:
+             [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (rc != 0) v = nil;
+    }
+    cached = v.length ? v : @"unknown";
     at = now;
     return cached;
 }
@@ -306,9 +313,25 @@ static NSString *PageHTML(void) {
         "log('正在下载并交给 dpkg…');"
         "const r=await fetch('/api/selfupdate?url='+encodeURIComponent(u),{method:'POST'});"
         "log(await r.text())}"
-        "async function upload(file){log('上传 '+file.name+' ('+file.size+' 字节)…');"
-        "const r=await fetch('/api/install?name='+encodeURIComponent(file.name),"
-        "{method:'POST',body:file});log(await r.text());setTimeout(()=>location.reload(),1500)}"
+        "function upload(file){"
+        "const t0=Date.now();let timer=null;"
+        "const xhr=new XMLHttpRequest();"
+        "xhr.open('POST','/api/install?name='+encodeURIComponent(file.name),true);"
+        "xhr.upload.onprogress=e=>{"
+        "if(!e.lengthComputable)return;"
+        "const dt=Math.max((Date.now()-t0)/1000,0.05);"
+        "const mb=(e.loaded/1048576).toFixed(1),tot=(e.total/1048576).toFixed(1);"
+        "const spd=(e.loaded/1048576/dt).toFixed(1),pct=Math.min(100,Math.round(e.loaded*100/e.total));"
+        "log('上传 '+file.name+'：'+pct+'% ('+mb+'/'+tot+' MB · '+spd+' MB/s)…');};"
+        "xhr.upload.onload=()=>{"
+        "const udt=((Date.now()-t0)/1000).toFixed(1);"
+        "const it0=Date.now();"
+        "const tick=()=>log('上传完成（用时 '+udt+'s），设备端正在解包 / 签名 / 注册… ('+Math.round((Date.now()-it0)/1000)+'s)');"
+        "tick();timer=setInterval(tick,1000);};"
+        "xhr.onload=()=>{if(timer)clearInterval(timer);log(xhr.responseText);setTimeout(()=>location.reload(),1500);};"
+        "xhr.onerror=()=>{if(timer)clearInterval(timer);log('上传失败（网络中断）');};"
+        "log('准备上传 '+file.name+' ('+(file.size/1048576).toFixed(1)+' MB)…');"
+        "xhr.send(file)}"
         "const d=document.getElementById('drop'),inp=document.getElementById('f');"
         "inp.onchange=e=>e.target.files[0]&&upload(e.target.files[0]);"
         "['dragenter','dragover'].forEach(t=>d.addEventListener(t,e=>{e.preventDefault();"
@@ -377,41 +400,77 @@ static NSData *HandleRequest(NSString *head, NSData *preBody, int fd) {
         NSUInteger want = clenKey ? (NSUInteger)[[clenKey substringFromIndex:15]
                                   stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]].integerValue : 0;
 
-        // 边收边写：以前把整个 ipa 收进 NSMutableData，大包（Kodi 200MB+）会撞上
-        // 本进程的 jetsam 内存上限被系统杀掉（JETSAM_REASON_MEMORY_PERPROCESSLIMIT）。
+        // 512KB 缓冲流式写盘：避免每包 1.4KB 就触发一次写盘 syscall，同时避免大包撞 jetsam 内存上限
         int wfd = open([dest fileSystemRepresentation], O_CREAT | O_WRONLY | O_TRUNC, 0644);
         if (wfd < 0) {
             return HttpResponse(500, @"text/plain", [@"无法创建临时文件" dataUsingEncoding:NSUTF8StringEncoding]);
         }
+        CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent();
+        const size_t kBufCap = 512 * 1024;
+        uint8_t *wbuf = (uint8_t *)malloc(kBufCap);
+        size_t wlen = 0;
         NSUInteger got = 0;
-        uint8_t buf[65536];
-        if (preBody.length > 0) {
-            write(wfd, preBody.bytes, preBody.length);
+        BOOL writeOK = (wbuf != NULL);
+
+        if (writeOK && preBody.length > 0) {
+            const uint8_t *p = (const uint8_t *)preBody.bytes;
+            size_t left = preBody.length;
+            while (left > 0) {
+                ssize_t w = write(wfd, p, left);
+                if (w <= 0) { if (errno == EINTR) continue; writeOK = NO; break; }
+                p += w; left -= (size_t)w;
+            }
             got = preBody.length;
         }
-        while (got < want) {
-            size_t room = sizeof(buf);
+        while (writeOK && got < want) {
+            size_t room = kBufCap - wlen;
             if (want - got < room) room = want - got;
-            ssize_t n = read(fd, buf, room);
-            if (n <= 0) break;
-            if (write(wfd, buf, (size_t)n) != n) break;
+            ssize_t n = read(fd, wbuf + wlen, room);
+            if (n <= 0) { if (n < 0 && errno == EINTR) continue; break; }
+            wlen += (size_t)n;
             got += (NSUInteger)n;
+            if (wlen >= kBufCap || got >= want) {
+                const uint8_t *p = wbuf;
+                size_t left = wlen;
+                while (left > 0) {
+                    ssize_t w = write(wfd, p, left);
+                    if (w <= 0) { if (errno == EINTR) continue; writeOK = NO; break; }
+                    p += w; left -= (size_t)w;
+                }
+                wlen = 0;
+            }
         }
+        if (writeOK && wlen > 0) {
+            const uint8_t *p = wbuf;
+            size_t left = wlen;
+            while (left > 0) {
+                ssize_t w = write(wfd, p, left);
+                if (w <= 0) { if (errno == EINTR) continue; writeOK = NO; break; }
+                p += w; left -= (size_t)w;
+            }
+        }
+        free(wbuf);
         close(wfd);
+        double upSec = CFAbsoluteTimeGetCurrent() - t0;
+        if (upSec < 0.01) upSec = 0.01;
         if (got == 0) {
             [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
             return HttpResponse(400, @"text/plain", [@"空请求体" dataUsingEncoding:NSUTF8StringEncoding]);
         }
-        if (want > 0 && got < want) {
+        if (!writeOK || (want > 0 && got < want)) {
             [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
             return HttpResponse(400, @"text/plain", [@"上传不完整" dataUsingEncoding:NSUTF8StringEncoding]);
         }
 
+        CFAbsoluteTime t1 = CFAbsoluteTimeGetCurrent();
         int rc = 0;
-        NSString *out = ATDaemon([NSString stringWithFormat:@"install %@", dest], &rc);
+        NSString *out = ATDaemonTimeout([NSString stringWithFormat:@"install %@", dest], 300, &rc);
+        double instSec = CFAbsoluteTimeGetCurrent() - t1;
         [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
+        NSString *summary = [NSString stringWithFormat:@"[上传 %.1f MB / %.1fs (%.1f MB/s) · 安装 %.1fs]\n%@",
+                             (double)got / 1048576.0, upSec, ((double)got / 1048576.0) / upSec, instSec, out];
         return HttpResponse(rc == 0 ? 200 : 500, @"text/plain; charset=utf-8",
-                            [out dataUsingEncoding:NSUTF8StringEncoding]);
+                            [summary dataUsingEncoding:NSUTF8StringEncoding]);
     }
     if ([method isEqualToString:@"POST"] && [path isEqualToString:@"/api/uninstall"]) {
         NSString *bid = qv[@"bid"] ?: @"";
@@ -457,10 +516,14 @@ static void *ConnThread(void *arg) {
 }
 
 static void ServeConn(int fd) {
-    // 半开/慢连接最多占用线程 30s，避免线程被无限拖住
+    // 半开/慢连接最多占用线程 30s，避免线程被无限拖住；加大接收缓冲 + 关 Nagle 提升局域网上传速率
     struct timeval tv = { .tv_sec = 30, .tv_usec = 0 };
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    int rcvbuf = 1024 * 1024;
+    setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+    int nodelay = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
 
     NSUInteger clen = 0;
     NSMutableData *pre = [NSMutableData data];

@@ -22,6 +22,7 @@ ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   → 
 | **Dual-hash signature** | Signing only sha1 or only sha256 makes the process die instantly, with no log whatsoever |
 | **`get-task-allow`** | Without it the process is judged to have "invalid code pages" and killed. `platform-application`, `no-sandbox` and `no-container` are needed as well |
 | **`application-identifier` matches the bundle id** | Signing B with A's entitlements is rejected silently |
+| **GPU IOKit entitlements** (OpenGL ES / Metal apps) | Missing `com.apple.security.iokit-user-client-class` (`AGX*` / `IOAccel*` / `IOSurfaceRootUserClient`) causes `EAGLContext` initialization to return `nil`; included automatically by `tsltv` since 2.1.5 |
 
 > Exception: apps that ship with the jailbreak (irisin, for example) go through Relaxin's own
 > signing channel and run without `get-task-allow`. That is why `tsltv verify` applies different

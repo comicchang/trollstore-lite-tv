@@ -38,6 +38,7 @@ echo "$VER" > "$STAGE/usr/libexec/tsltv/VERSION"
 cp "$ROOT/src/web/tsltvweb"         "$STAGE/usr/libexec/tsltv/"
 cp "$ROOT/src/tools/wake"               "$STAGE/usr/libexec/tsltv/"
 cp "$ROOT/src/tools/modinject" "$STAGE/usr/libexec/tsltv/"
+cp "$ROOT/src/tools/machoscan" "$STAGE/usr/libexec/tsltv/"
 cp "$ROOT/src/daemon/"com.trollstorelite.tv.*.plist  "$STAGE/Library/LaunchDaemons/"
 cp -a "$ROOT/src/gui/TrollStoreLiteTV.app"     "$STAGE/Applications/"
 

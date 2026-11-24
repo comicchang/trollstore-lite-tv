@@ -50,18 +50,18 @@ CI's `package` job uses exactly this path (`--root-owner-group` ensures the pack
 ## Publishing a new version
 
 ```sh
-# with a device: package on the device and upload from there
-ATV_IP=192.168.1.23 ATV_PASS='<device sudo password>' ./scripts/publish-release.sh v2.0.4
+# One command: build locally and publish a GitHub Release (no device needed)
+./scripts/publish-release.sh v2.1.5 dist/RELEASE-NOTES-v2.1.5.md
 
-# without a device: build locally, then upload manually
+# Or manually step by step
 ./scripts/build-deb-local.sh && ./examples/hello-tvos/build.sh
-gh release create v2.0.4 dist/*.deb dist/TSLTVDemo-unsigned.ipa --generate-notes
+gh release create v2.1.5 dist/trollstore-lite-tv_2.1.5_appletvos-arm64e.deb dist/TSLTVDemo-unsigned.ipa --notes-file dist/RELEASE-NOTES-v2.1.5.md
 ```
 
 It will:
 
-1. Rebuild the `.deb` on the device (`dist/trollstore-lite-tv_<ver>_appletvos-arm64e.deb`)
-2. Build the unsigned demo ipa (`dist/TSLTVDemo-unsigned.ipa`)
+1. Build the `.deb` locally (`dist/trollstore-lite-tv_<ver>_appletvos-arm64e.deb`)
+2. Build the unsigned demo ipa with a tvOS icon (`dist/TSLTVDemo-unsigned.ipa`)
 3. Create the GitHub Release and upload both artifacts
 
 ## What a Release should contain

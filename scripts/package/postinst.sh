@@ -21,7 +21,7 @@ TRUST_TMP=/var/tmp/trollstore-lite-tv.trustbin
 trap 'rm -f "$ENT" "$ENT.one" "$TRUST_TMP"' 0
 
 chmod 755 "$BIN/tsltv" "$BIN/tsltvd" "$BIN/tsltvweb" "$BIN/retrust.sh" \
-  "$BIN/tsh" "$BIN/wake" "$BIN/modinject"
+  "$BIN/tsh" "$BIN/wake" "$BIN/modinject" "$BIN/machoscan"
 
 cat > "$ENT" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -59,6 +59,7 @@ sign_and_trust() {
 sign_and_trust "$BIN/tsltvweb" com.trollstorelite.tv.web
 sign_and_trust "$BIN/wake" com.trollstorelite.tv.wake
 sign_and_trust "$BIN/modinject" com.trollstorelite.tv.modinject
+sign_and_trust "$BIN/machoscan" com.trollstorelite.tv.machoscan
 sign_and_trust "$APP/TrollStoreLiteTV" com.trollstorelite.tv
 
 mkdir -p /var/tmp/tsltv-inbox

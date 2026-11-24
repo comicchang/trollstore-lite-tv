@@ -24,10 +24,10 @@ ATV_PASS='<device sudo password>' ./scripts/accept.sh 192.168.1.23     # seven s
 | Injection blocking | `remote` rejecting `;`, `|` and backticks |
 | Pre-install verdicts | `precheck_verdict` on four inputs: allow / reject encrypted / warn iOS / warn minOS |
 | Mach-O parsing | Compiles a tvOS binary on the spot and asserts `platform=3 minos=17.0 cryptid=0` |
-| demo ipa | After building, checks the `Payload/TSLTVDemo.app` structure and that it really is unsigned |
+| demo ipa | After building, checks `Payload/TSLTVDemo.app` layout, `Assets.car` icon, `CFBundleExecutable` match and that it really is unsigned |
 | Uninstall origin | CLI `uninstall` refuses `origin=adopt` and still removes `origin=install` |
 
-Current macOS + tvOS SDK run: **all 42 assertions pass**. Linux CI skips SDK-dependent checks.
+Current macOS + tvOS SDK run: **all 44 assertions pass**. Linux CI skips SDK-dependent checks.
 
 ## CI (.github/workflows/ci.yml)
 

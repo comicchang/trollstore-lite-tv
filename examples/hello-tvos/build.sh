@@ -17,6 +17,19 @@ clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -fobjc-arc \
       -O2 "$HERE/main.m" -o "$BUILD/Payload/TSLTVDemo.app/TSLTVDemo"
 cp "$HERE/Info.plist" "$BUILD/Payload/TSLTVDemo.app/Info.plist"
 
+# 生成并编译反色风格的 tvOS 图标，避免主屏空白占位
+if command -v swift >/dev/null 2>&1; then
+  swift "$HERE/make-icon.swift" "$BUILD/Assets.xcassets" >/dev/null 2>&1 || true
+  if [ -d "$BUILD/Assets.xcassets" ]; then
+    DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+    actool --compile "$BUILD/Payload/TSLTVDemo.app" --platform appletvos \
+           --minimum-deployment-target 17.0 --target-device tv \
+           --app-icon "AppIcon" \
+           --output-partial-info-plist "$BUILD/icon.plist" \
+           "$BUILD/Assets.xcassets" >/dev/null 2>&1 || echo "警告: demo 图标编译失败"
+  fi
+fi
+
 mkdir -p "$ROOT/dist"
 rm -f "$ROOT/dist/TSLTVDemo-unsigned.ipa"   # zip 会追加，必须先删
 ( cd "$BUILD" && zip -qr "$ROOT/dist/TSLTVDemo-unsigned.ipa" Payload )

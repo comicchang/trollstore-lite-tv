@@ -23,10 +23,10 @@ ATV_PASS='<设备sudo密码>' ./scripts/accept.sh 192.168.1.23     # 七步，�
 | 注入拦截 | `remote` 对 `;` `|` 反引号的拒绝 |
 | 安装前判定 | `precheck_verdict` 四种输入：放行 / 加密拒绝 / iOS 警告 / minOS 警告 |
 | Mach-O 解析 | 现场编一个 tvOS 二进制，断言 `platform=3 minos=17.0 cryptid=0` |
-| demo ipa | 构建后检查 `Payload/TSLTVDemo.app` 结构与"确实未签名" |
+| demo ipa | 构建后检查 `Payload/TSLTVDemo.app` 结构、图标 `Assets.car`、`CFBundleExecutable` 与"确实未签名" |
 | 卸载来源 | CLI `uninstall` 拒绝卸载 `origin=adopt`，允许卸载 `origin=install` |
 
-当前本机 macOS + tvOS SDK：**42 条断言全过**。Linux CI 会跳过 SDK 相关检查。
+当前本机 macOS + tvOS SDK：**44 条断言全过**。Linux CI 会跳过 SDK 相关检查。
 
 ## CI（.github/workflows/ci.yml）
 

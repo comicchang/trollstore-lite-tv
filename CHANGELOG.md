@@ -6,10 +6,12 @@
 - 将 postinst/prerm 独立为共享脚本；签名、trustcache 或 LaunchDaemon 启动失败会让安装明确失败，并为 trustcache 注入补充 `/var/tmp` 路径回退。
 - 修复设备 ldid 拒绝 shell 脚本 `tsh`（`Unknown header magic`）：只对 Mach-O helper 和 app 主程序签名。
 - 修复升级路径 `prerm` 提前停服和删软链的问题，卸载软件包时保留用户的 `/var/tmp/tsltv-inbox` 投递文件。
-- 新增卸载来源回归覆盖（42 条断言），同步版本与文档。
+- 新增卸载来源回归覆盖（44 条断言），同步版本与文档。
 - 修复电视界面自截图状态文本的格式参数错位，确保 `runDir` 显示实际 FIFO 目录。
 - 修复 `src/cli/tsltv` 安装权限（`chmod -R a+rX`）与 GPU entitlements（`com.apple.security.iokit-user-client-class`，解决 YouTube TV Cobalt 等 OpenGL ES / Metal 应用因 `EAGLContext initWithAPI:3` 返回 `nil` 崩溃）。
 - 修复 `TrollStoreLiteTV.app` 的 tvOS 图标格式（`brandassets` `role=primary-app-icon` + `CFBundlePrimaryIcon=AppIconSmall`），解决主屏不显示图标。
+- 修复自带 demo（`examples/hello-tvos`）的 `CFBundleExecutable` 名称错位并补齐反色风格 tvOS 图标（`Assets.car`）；修复 `publish-release.sh` 与 `macos.yml` 的 demo 产物路径。
+- 大幅优化网络与大包安装速度：新增单进程 C 扫描器 `machoscan`（扫描 Kodi 12,149 个文件从 ~12 分钟降至 ~2 秒）、`.ipa` 解包后同卷 O(1) `mv` 替代整包 `cp -a`、`plutil -key` 零复制读取与按 PID 隔离 `$WORK`、`trust_one` 跳过必败的 `/Applications` 黑名单探测、多 Mach-O 4 路并发签名入信任；Web 商店 `:8787` 启用 1 MB `SO_RCVBUF` + `TCP_NODELAY` + 512 KB 缓冲写盘 + XHR 实时上传速率/阶段进度显示，且版本号改直读 `VERSION` 不再阻塞 `tsltvd`。
 
 
 ## 2.1.4 — 2026-11-24

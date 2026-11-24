@@ -89,7 +89,7 @@ open http://192.168.1.23:8787     # 把 ipa 拖进去
 ## 测试
 
 ```sh
-./tests/run.sh          # 不需要设备：42 条断言（语法/plist/用法/注入拦截/卸载护栏/预检判定/Mach-O 解析/demo ipa/mod 注入）
+./tests/run.sh          # 不需要设备：44 条断言（语法/plist/用法/注入拦截/卸载护栏/预检判定/Mach-O 解析/demo ipa 与图标/mod 注入）
 ATV_PASS=... ./scripts/accept.sh <ip>   # 需要设备：装/验/启/卸闭环
 ```
 

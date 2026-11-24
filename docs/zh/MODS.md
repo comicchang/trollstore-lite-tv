@@ -66,12 +66,20 @@ tsltv install Foo-modded.ipa
 | DRM 应用无效 | 解密后的 App Store 应用仍需要 FairPlay 密钥，mod 解决不了 |
 | 稳定性 | mod 崩了等于应用崩了；没有沙箱隔离 |
 
-## 与"油猴子脚本"的差别
+## 与"油猴子脚本"的差别与 Cobalt 注入路径
 
 油猴子脚本是运行在页面里的 JS，改动的是网页行为；这里的 mod 是**注入进程的
-原生代码**，能力更大、风险也更大。如果目标应用内部有 WKWebView，理论上也可以
-做"注入 JS"的 mod，但那需要单独写一个负责 evaluateJavaScript 的 dylib，
-不属于本工具的默认能力。
+原生代码**，能力更大、风险也更大。
+
+针对 YouTube TV（`YouTubeUnstable`）这类网页壳应用，**实测它并非 `WKWebView`**
+（二进制中不含 `WKWebView`/`UIWebView`），而是 Google 的 **Cobalt + Starboard + V8**
+自研 HTML5 引擎（加载 `https://www.youtube.com/tv`）。因此：
+
+- 传统的 ObjC `WKWebView` swizzle 对 YouTube TV 无效；
+- 正确的「类油猴插件」注入路径是在 Cobalt C++ 层拦截脚本执行与 CSP 策略（如
+  `HTMLScriptElement::Execute` 与 `DirectiveList::AddDirective`），放行脚本域名并向
+  `youtube.com/tv` 页面注入 userscript（例如 `Exaphis/mutube` + `TizenTube Cobalt`
+  即可在 YouTube 4.54.01 上实现去广告、SponsorBlock 与 4K 修复，再用 `tsltv` 永久安装免 7 天重签）。
 
 ## 现状
 

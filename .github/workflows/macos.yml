@@ -24,7 +24,7 @@ jobs:
         if: always()
         with:
           name: demo-ipa
-          path: dist/TrollStoreLiteTVDemo-unsigned.ipa
+          path: dist/TSLTVDemo-unsigned.ipa
           if-no-files-found: ignore
 
   package:

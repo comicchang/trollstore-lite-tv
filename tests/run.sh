@@ -163,6 +163,12 @@ if [ -d "$SDK" ]; then
       listing=$(unzip -l "$IPA" 2>/dev/null | awk '{print $4}')
       case "$listing" in *Payload/TSLTVDemo.app/Info.plist*) ok "包含 Payload/TSLTVDemo.app/Info.plist" ;; *) bad "ipa 结构不对" ;; esac
       case "$listing" in *Payload/TSLTVDemo.app/TSLTVDemo*) ok "包含主可执行" ;; *) bad "缺主可执行" ;; esac
+      case "$listing" in *Payload/TSLTVDemo.app/Assets.car*) ok "包含 tvOS 图标 Assets.car" ;; *) bad "缺 Assets.car 图标" ;; esac
+      if grep -q '<string>TSLTVDemo</string>' "$ROOT/examples/hello-tvos/Info.plist"; then
+        ok "demo Info.plist CFBundleExecutable 与二进制一致"
+      else
+        bad "demo Info.plist CFBundleExecutable 不一致"
+      fi
       # 必须是未签名的
       if command -v codesign >/dev/null 2>&1; then
         if codesign -dv "$IPA" >/dev/null 2>&1; then bad "ipa 竟然带签名（应未签名）"; else ok "确认未签名"; fi

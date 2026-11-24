@@ -15,4 +15,8 @@ cd "$(dirname "$0")"
 [ -f modinject.m ] && clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -fobjc-arc \
     -framework Foundation modinject.m -o modinject
 
-ls -l machocheck wake modinject 2>/dev/null || true
+# machoscan: 单进程快速扫描目录下的全部 Mach-O 文件（避免 shell 逐文件 fork）
+[ -f machoscan.c ] && clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -O2 \
+    machoscan.c -o machoscan
+
+ls -l machocheck wake modinject machoscan 2>/dev/null || true

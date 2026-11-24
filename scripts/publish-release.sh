@@ -17,13 +17,13 @@ gh auth status >/dev/null 2>&1 || { echo "请先 gh auth login"; exit 1; }
 # 确保产物是新的
 VER="${TAG#v}"
 echo "==> 构建 ${VER} 安装包"
-VER="$VER" sh scripts/build-deb.sh "$ATV_IP"   # 需要 ATV_IP 且设备可达
+VER="$VER" sh scripts/build-deb-local.sh
 echo "==> 构建无签名 demo ipa"
 sh examples/hello-tvos/build.sh
 
-DEB=$(ls dist/trollstore-lite-tv_*.deb | tail -1)
-IPA="dist/TrollStoreLiteTVDemo-unsigned.ipa"
-[ -f "$DEB" ] && [ -f "$IPA" ] || { echo "产物缺失"; exit 1; }
+DEB="dist/trollstore-lite-tv_${VER}_appletvos-arm64e.deb"
+IPA="dist/TSLTVDemo-unsigned.ipa"
+[ -f "$DEB" ] && [ -f "$IPA" ] || { echo "产物缺失: $DEB 或 $IPA"; exit 1; }
 
 echo "==> 上传 release $TAG"
 if [ -n "$NOTES" ] && [ -f "$NOTES" ]; then
