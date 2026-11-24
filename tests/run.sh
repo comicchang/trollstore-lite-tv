@@ -136,6 +136,39 @@ else
   ok "跳过 demo 构建（无 tvOS SDK）"
 fi
 
+
+# ---------------------------------------------------------------- 8. mod 注入
+group "mod 注入（LC_LOAD_DYLIB）"
+SDK2=/Applications/Xcode.app/Contents/Developer/Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS.sdk
+if [ -d "$SDK2" ] && command -v clang >/dev/null 2>&1; then
+  clang -fobjc-arc -framework Foundation -O2 "$ROOT/src/tools/modinject.m" -o "$TMP/mi" 2>/dev/null
+  clang -target arm64-apple-tvos17.0 -isysroot "$SDK2" -fobjc-arc \
+        -framework UIKit -framework Foundation -framework CoreGraphics \
+        -O2 "$ROOT/src/gui/main.m" -o "$TMP/host" 2>/dev/null
+  if [ -x "$TMP/mi" ] && [ -f "$TMP/host" ]; then
+    before=$(python3 - "$TMP/host" <<'EOP'
+import struct,sys
+d=open(sys.argv[1],'rb').read(32)
+print(struct.unpack_from('<I',d,16)[0])
+EOP
+)
+    "$TMP/mi" "$TMP/host" @executable_path/Frameworks/x.dylib >/dev/null 2>&1
+    after=$(python3 - "$TMP/host" <<'EOP'
+import struct,sys
+d=open(sys.argv[1],'rb').read(32)
+print(struct.unpack_from('<I',d,16)[0])
+EOP
+)
+    if [ "$after" = "$((before + 1))" ]; then ok "注入成功（ncmds ${before}→${after}）"; else bad "ncmds 未增加（${before}→${after}）"; fi
+    # 注意：macOS 的 strings 不扫 Mach-O 头部，load command 只能用二进制 grep
+    if grep -aq "@executable_path/Frameworks/x.dylib" "$TMP/host"; then ok "加载命令已写入"; else bad "找不到注入的路径"; fi
+  else
+    ok "跳过 mod 注入（编译失败）"
+  fi
+else
+  ok "跳过 mod 注入（无 SDK）"
+fi
+
 # ---------------------------------------------------------------- 汇总
 printf '\n----------------------------------------\n'
 printf 'PASS %d / FAIL %d\n' "$PASS" "$FAIL"

@@ -11,4 +11,8 @@ cd "$(dirname "$0")"
 [ -f wake.m ] && clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -fobjc-arc \
     -framework Foundation wake.m -o wake
 
-ls -l machocheck wake 2>/dev/null || true
+# modinject: 向 Mach-O 插入 LC_LOAD_DYLIB（mods apply 用）
+[ -f modinject.m ] && clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -fobjc-arc \
+    -framework Foundation modinject.m -o modinject
+
+ls -l machocheck wake modinject 2>/dev/null || true

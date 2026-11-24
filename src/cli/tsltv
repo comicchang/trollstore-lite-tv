@@ -20,6 +20,7 @@
 #   tsltv verify [bundle-id...]  校验签名/信任/注册状态
 #   tsltv trust status           信任缓存概况
 #   tsltv trust retrust          按记账清单重放信任
+#   tsltv mods list|apply <bid> <dylib>  原生 dylib mod（注入 + 重签）
 #   tsltv remote <子命令...>     经 daemon(/var/run/tsltv 的 FIFO) 执行，供 GUI/远程调用
 #
 # 状态文件: /usr/libexec/tsltv/installed.tsv（5 字段）
@@ -308,6 +309,67 @@ precheck_verdict() { # "<platform=N minos=X.Y cryptid=Z>"
     fi
   fi
   return 0
+}
+
+
+# mods —— 原生 dylib 注入（类似 TrollFools；tvOS 没有可注入的 JS 运行时）
+cmd_mods() { # list | apply <bundle-id> <dylib>
+  need_root "$@"
+  need_jb
+  _sub="${1:-}"
+  case "$_sub" in
+    list)
+      state_init
+      printf '%-34s %s\n' BUNDLE_ID MODS
+      while IFS='	' read -r _bid _p _cd _ts _orig; do
+        [ -d "$_p" ] || continue
+        if [ -f "$_p/.tsltv-mods" ]; then
+          _m=$(tr '\n' ' ' < "$_p/.tsltv-mods")
+        else
+          # 没有清单就退化为扫描，排除 Apple 自带的 libswift*
+          _m=$(ls "$_p/Frameworks" 2>/dev/null | grep '\.dylib$' | grep -v '^libswift' | tr '\n' ' ')
+        fi
+        [ -n "$_m" ] && printf '%-34s %s\n' "$_bid" "$_m"
+      done < "$STATE"
+      return 0
+      ;;
+    apply)
+      _bid="${2:-}"; _src="${3:-}"
+      [ -n "$_bid" ] && [ -n "$_src" ] || die "用法: tsltv mods apply <bundle-id> <dylib>"
+      [ -f "$_src" ] || die "找不到 dylib: $_src"
+      state_init
+      _p=$(state_path "$_bid")
+      [ -d "$_p" ] || die "记账里没有这个应用: $_bid"
+      _exe=$(exe_of "$_p")
+      [ -x "$_p/$_exe" ] || die "找不到主程序: $_p/$_exe"
+
+      _name=$(basename "$_src")
+      mkdir -p "$_p/Frameworks"
+      cp "$_src" "$_p/Frameworks/$_name" || die "复制 dylib 失败"
+      say "注入 @executable_path/Frameworks/$_name → $_exe"
+      "$BASE/modinject" "$_p/$_exe" "@executable_path/Frameworks/$_name" || die "注入失败（头部空隙不足？）"
+
+      # 主程序与 dylib 都要重签 + 重新入信任缓存
+      sign_one "$_p/$_exe" "" || die "主程序签名失败"
+      trust_one "$_p/$_exe" || die "主程序信任注入失败"
+      sign_one "$_p/Frameworks/$_name" "" || die "dylib 签名失败"
+      trust_one "$_p/Frameworks/$_name" || die "dylib 信任注入失败"
+
+      _cd=$(cdhash_of "$_p/$_exe" 2>/dev/null)
+      state_add "$_bid" "$_p" "$_cd" "$(state_origin "$_bid")" 2>/dev/null || true
+      uicache -p "$_p" >/dev/null 2>&1 || true
+      grep -qxF "$_name" "$_p/.tsltv-mods" 2>/dev/null || echo "$_name" >> "$_p/.tsltv-mods"
+      say "完成：$_name 已注入 $_bid（杀掉该应用后重启生效）"
+      return 0
+      ;;
+    *)
+      say "用法:"
+      say "  tsltv mods list                                    列出装了 dylib 的应用"
+      say "  tsltv mods apply <bundle-id> <dylib>               注入并重签"
+      say "卸载 mod：重装该应用（本工具不实现 LC 删除）"
+      return 1
+      ;;
+  esac
 }
 
 # 重新注册（借鉴 TrollStore RootHelper 的 refresh/refresh-all）
@@ -682,6 +744,7 @@ case "${1:-}" in
   verify)    need_root; shift; cmd_verify "$@" ;;
   trust)     need_root; shift; cmd_trust "$@" ;;
   remote)    shift; cmd_remote "$@" ;;
+  mods)      shift; cmd_mods "$@" ;;
   ""|-h|--help|help)
     sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
     ;;

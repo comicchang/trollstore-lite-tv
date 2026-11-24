@@ -65,7 +65,7 @@ def parse(data: bytearray):
 def make_load_dylib(path: str) -> bytes:
     raw = path.encode() + b"\x00"
     size = align8(24 + len(raw))
-    cmd = LC_LOAD_DYLIB | LC_REQ_DYLD
+    cmd = LC_LOAD_DYLIB   # 不带 LC_REQ_DYLD：0x8000000c 会让 otool/dyld 认不出
     # cmd, cmdsize, name offset(24), timestamp, current_version, compatibility_version
     body = struct.pack("<IIIIII", cmd, size, 24, 2, 0x10000, 0x10000)
     return body + raw + b"\x00" * (size - len(body) - len(raw))

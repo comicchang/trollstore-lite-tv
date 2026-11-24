@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.3 — 2026-11-24
+
+**mods 可用了**
+
+- 新增 `tsltv mods list` / `tsltv mods apply <bundle-id> <dylib>`：复制 dylib →
+  插 `LC_LOAD_DYLIB` → 重签 → 重新注入信任 → 刷新注册，一条命令完成
+- 新增设备端 `modinject`（`src/tools/modinject.m`），与 `tools/inject_dylib.py` 逻辑一致
+  （macOS 构建下两者输出 **md5 完全相同**）
+- 修 `LC_LOAD_DYLIB` 命令值：此前误加了 `LC_REQ_DYLD`（0x8000000c），
+  otool/dyld 会当成未知命令；正确是 `0xC`
+- 测试新增"mod 注入"一组（38 条断言）
+
 ## 2.1.2 — 2026-11-24
 
 **安装器修复 + mods 原型**

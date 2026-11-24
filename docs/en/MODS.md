@@ -28,7 +28,21 @@ python3 tools/inject_dylib.py \
 It only edits the load commands. The signature becomes invalid and must be redone
 (the installer handles that).
 
-## Full workflow
+## Install a mod with the CLI (on device)
+
+```sh
+tsltv mods list                              # which apps already carry dylibs
+tsltv mods apply com.google.ios.youtube.tvl /var/tmp/libmod.dylib
+```
+
+`mods apply` does four things: copy the dylib into `Frameworks/`, run `modinject` to add
+`LC_LOAD_DYLIB`, re-sign the main binary and the dylib, then refresh the trust cache and
+LaunchServices registration.
+
+> To remove a mod: **reinstall the app**. This tool does not remove load commands
+> (editing them back is riskier than reinstalling).
+
+## Full workflow (manual)
 
 ```sh
 # 1. build the mod (tvOS arm64 only)

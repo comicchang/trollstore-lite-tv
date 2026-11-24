@@ -25,7 +25,20 @@ python3 tools/inject_dylib.py \
 
 它只做一件事：**改加载命令**。签名会因此失效，必须重新签名（安装器会做）。
 
-## 完整流程
+## 用 CLI 一步装 mod（设备上直接操作）
+
+```sh
+# 目标应用已在记账里（tsltv list 能看到）
+tsltv mods list                              # 看哪些应用已经带了 dylib
+tsltv mods apply com.google.ios.youtube.tvl /var/tmp/libmod.dylib
+```
+
+`mods apply` 做四件事：复制 dylib 到 `Frameworks/` → 调 `modinject` 插
+`LC_LOAD_DYLIB` → 重签主程序与 dylib → 重新注入信任缓存并刷新注册。
+
+> 卸载 mod：**重装该应用**。本工具不实现 LC 删除（改回去比重装更危险）。
+
+## 完整流程（离线手工做）
 
 ```sh
 # 1. 编译 mod（必须是 tvOS arm64）
