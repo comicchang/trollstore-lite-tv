@@ -62,6 +62,7 @@ mv /tmp/kodi-ipa/extract/Applications/Kodi.app /tmp/kodi-ipa/Payload/
 Drop `Kodi-tvOS.ipa` into `http://<AppleTV-IP>:8787` (or run `tsltv install`).
 - Kodi ships ~12,000+ files and 151 Mach-O dylibs; v2.1.5+ uses the single-process `machoscan` C scanner, O(1) same-volume `mv`, and 4-way parallel signing/trustcache injection.
 - v2.1.6+ `tsltv trust retrust` also replays all 151 embedded dylibs after a reboot + re-jailbreak.
+- For multi-device SMB + shared MariaDB library/search sync and onboarding future devices, see [KODI-SYNC.md](KODI-SYNC.md).
 
 ### Troubleshooting: Kodi opens to a black screen
 

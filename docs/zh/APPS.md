@@ -62,6 +62,7 @@ mv /tmp/kodi-ipa/extract/Applications/Kodi.app /tmp/kodi-ipa/Payload/
 将 `Kodi-tvOS.ipa` 拖入网页商店 `http://<AppleTV-IP>:8787`（或走 `tsltv install`）。
 - Kodi 包含约 12,000+ 文件与 151 个 Mach-O 动态库；v2.1.5+ 的单进程 `machoscan` + 同卷 `mv` + 4 路并发签名可在数十秒内完成全量签名与信任注入。
 - v2.1.6+ 的 `tsltv trust retrust` 也会自动重放 Kodi 的全部 151 个动态库。
+- 多机 SMB 媒体源映射、MariaDB 共享片库/搜索同步与未来新设备接入指南见 [KODI-SYNC.md](KODI-SYNC.md)。
 
 ### 常见排障：Kodi 启动黑屏
 
