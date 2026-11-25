@@ -9,9 +9,15 @@ but without it none of this runs.
 
 | Project | Role | Notes |
 |---|---|---|
-| **Relaxin** (roothide-family jailbreak) | Provides the appendable kernel trust cache via `jbctl trustcache add` | The precondition for **every** capability here. No jailbreak, no path |
+| [**Relaxin**](https://github.com/owngoal-dev/Relaxin) (MIT, roothide-family jailbreak) | Provides the appendable kernel trust cache via `jbctl trustcache add` | The precondition for **every** capability here. No jailbreak, no path |
 | **roothide** | Relaxin's bootstrap / vroot framework (`>= 0.1.0-5`) | Provides the `jbroot` layout, `/usr/libexec` redirection and LaunchDaemon patches |
 | `ldid` / `uicache` from **Procursus** | Ad-hoc signing, LaunchServices registration | Installed via APT; not bundled in this repository |
+
+## Optional research & companion tools (referenced only, not bundled)
+
+| Project | License | Role |
+|---|---|---|
+| [**Lakr233/vphone-cli**](https://github.com/Lakr233/vphone-cli) | MIT | Runs virtualized Apple firmware on Apple Silicon Macs via `Virtualization.framework` for low-risk research and debugging |
 
 > For installing and using Relaxin, refer to its official release channels; this repository does
 > not ship the jailbreak itself and takes no responsibility for jailbreak-related risk.

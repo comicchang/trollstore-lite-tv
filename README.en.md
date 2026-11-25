@@ -165,13 +165,11 @@ Licensing and the scope of what we borrowed: [NOTICE](NOTICE). Porting details:
 
 ---
 
-## Security and disclaimer
+## Security, Legal Notice & Disclaimer
 
-- This tool **writes only to the data partition and jbroot**; it does not touch the read-only system
-  volume, does not modify the jailbreak itself (basebin), and does not touch the kernel.
-- Uninstalling only ever applies to apps this tool installed (manifest guard), so system apps cannot be deleted by accident.
-- Use it only on your own devices, for software you have the right to use. **Not for piracy**, and it
-  offers no decryption capability whatsoever.
-- Jailbreaking carries risk; back up before you start (the author accepts no liability for damaged devices).
+- **Write & safety boundaries**: This tool **writes only to the data partition and jbroot**; it does not touch the read-only system volume, jailbreak basebin, or kernel. Uninstall is protected by an `origin=install` manifest guard so system and adopted apps cannot be accidentally deleted.
+- **Copyright & zero third-party assets**: Released under the **MIT License** ([LICENSE](LICENSE)). This repository contains original source code only — **no** third-party `.ipa` files, firmware, icons, certificates, or FairPlay keys. It provides **no** DRM/FairPlay decryption and rejects encrypted App Store bundles (`cryptid != 0`) before installation.
+- **Trademarks & non-affiliation**: Apple, Apple TV, tvOS, App Store, and FairPlay are trademarks of Apple Inc.; TrollStore is by opa334; Kodi is a trademark of the XBMC Foundation. This project is independent and not affiliated with or endorsed by any of them. See [NOTICE](NOTICE).
+- **Disclaimer of warranty & liability (AS-IS)**: Provided "AS IS" without warranty of any kind. Use only on your own devices with software you have the legal right to install, in compliance with applicable laws. Back up before starting; the authors and contributors assume no liability for device damage, data loss, or misuse.
 
 How to report security issues: [SECURITY.md](SECURITY.md).

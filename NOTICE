@@ -1,36 +1,72 @@
-TrollStoreLiteTV —— tvOS 上的 TrollStore 概念实现（非官方 fork）
-================================================================
+TrollStore Lite TV — Copyright, Third-Party Notices & Legal Disclaimer
+=======================================================================
 
-本目录包含与 **TrollStore** 的接口兼容层。TrollStore 的版权与许可：
+1. Copyright & License
+----------------------
+Copyright (c) 2026 Comic Chang.
+Licensed under the MIT License (see LICENSE).
 
-    TrollStore
-    https://github.com/opa334/TrollStore
-    Copyright (c) 2022-2026 Lars Fröder
-    License: MIT
-    （其中 RootHelper/uicache.m 为 CoolStar 的 BSD-4-Clause）
+All source code in this repository is independently written and released under
+the MIT License. No copyleft (GPL) or unlicensed third-party source code is
+bundled in this repository.
 
-我们在**接口与设计**层面借鉴了以下部分，代码为本项目独立实现（POSIX shell），
-未复制 TrollStore 源码：
+2. Trademark & Non-Affiliation Notice
+-------------------------------------
+- Apple, Apple TV, tvOS, App Store, FairPlay, and Xcode are trademarks of
+  Apple Inc., registered in the U.S. and other countries.
+- TrollStore and TrollStore Lite are created by Lars Fröder (opa334).
+- Kodi is a registered trademark of the XBMC Foundation.
+- YouTube and Cobalt are trademarks of Google LLC.
 
-  1. RootHelper 的子命令结构
-     install [force] [custom|installd] <ipa> / uninstall / refresh / refresh-all
-     / modification-registration —— 见 fork/tsh
-  2. 「app 只是壳，真正的特权操作在一个 root helper 里」这种分层
-  3. IPA 元数据（iTunesMetadata.plist 的 itemName / bundleShortVersionString）的用途
-  4. 「注册为 System 还是 User」这一区分（shouldRegisterAsUserByDefault）
+This project is an independent, unofficial open-source project. It is NOT
+affiliated with, endorsed by, sponsored by, or officially connected to Apple
+Inc., opa334, the XBMC Foundation, Google LLC, or any other entity named above.
 
-如果你要分发本项目的二进制，请保留本 NOTICE 与上述版权声明。
+3. Content & Anti-Circumvention Boundary
+----------------------------------------
+- This repository contains ZERO copyrighted third-party binaries, `.ipa` files,
+  firmware images, app icons, developer certificates, or decryption keys.
+- This tool does NOT implement FairPlay decryption, CoreTrust exploitation, or
+  any DRM/payment circumvention. Encrypted App Store packages (`cryptid != 0`)
+  are explicitly rejected prior to installation.
+- The built-in local userscript host (`:8787`) is a generic static script
+  endpoint; no third-party userscripts are distributed in this repository.
 
-关于「为什么不能直接 fork 上游代码并在 tvOS 编译」，见同目录的 PORTING.md。
+4. Third-Party Projects Referenced (NOT Bundled)
+------------------------------------------------
+The following external projects are NOT included in this repository, but are
+either runtime prerequisites, referenced research tools, or design inspirations:
 
----
+- TrollStore (https://github.com/opa334/TrollStore)
+  Copyright (c) 2022-2026 Lars Fröder — MIT License.
+  Design & CLI interface inspiration only (RootHelper subcommand conventions in
+  `src/fork/tsh`, `iTunesMetadata.plist` metadata lookup, System vs User
+  registration distinction). No TrollStore source code is copied; CoolStar's
+  BSD-4-Clause `uicache.m` is NOT included. See docs/zh/PORTING-TROLLSTORE.md
+  and docs/en/PORTING-TROLLSTORE.md.
 
-## 第三方组件与归属
+- Relaxin (https://github.com/owngoal-dev/Relaxin) — MIT License.
+  RootHide-based tvOS 17 jailbreak providing `jbctl trustcache add` at runtime.
+  Not part of this repository.
 
-本项目**未包含**以下项目的源码，但运行时依赖或接口上借鉴了它们：
+- Procursus (`ldid`, `uicache`, `dpkg`, `plutil`)
+  Installed on the jailbroken device via APT; not bundled in this repository.
 
-- **TrollStore** (https://github.com/opa334/TrollStore) — MIT, Copyright (c) 2022-2026 Lars Fröder
-  借鉴其 RootHelper 子命令接口与部分概念，详见 NOTICE。本项目未复制其代码。
-  其中 `RootHelper/uicache.m` 为 CoolStar 的 BSD-4-Clause，本项目不包含该文件。
-- **Relaxin / roothide** — 越狱环境，本项目的运行前提，非本项目组成部分。
-- **ldid / uicache** — 来自 Procursus，通过 APT 安装在设备上使用，未打包进本仓库。
+- vphone-cli (https://github.com/Lakr233/vphone-cli) — MIT License.
+  Optional external macOS Virtualization.framework research tool referenced in
+  documentation for low-risk firmware research. Not bundled.
+
+5. Disclaimer of Warranty & Limitation of Liability
+---------------------------------------------------
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+Using privileged tools on a jailbroken Apple TV carries inherent risks,
+including software instability, data loss, or rendering the device unbootable.
+By using this software, you agree that you do so entirely at your own risk,
+strictly on devices you own and software you have the legal right to install,
+and that you are solely responsible for compliance with applicable local laws
+and third-party terms. The authors and contributors accept no liability for
+any direct, indirect, incidental, or consequential damages arising from use or
+misuse of this software.
