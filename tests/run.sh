@@ -228,6 +228,19 @@ else
   ok "跳过 mod 注入（无 SDK）"
 fi
 
+# ---------------------------------------------------------------- 9. Stage 1 验证闸门
+group "Stage 1（宿主机侧静态校验）"
+if [ -d "$SDK" ] && command -v clang >/dev/null 2>&1; then
+  if sh "$ROOT/tests/stage1/run.sh" > "$TMP/stage1.out" 2>&1; then
+    ok "Stage 1 全部 PASS"
+  else
+    bad "Stage 1 失败"
+    sed 's/^/    /' "$TMP/stage1.out"
+  fi
+else
+  ok "跳过 Stage 1（无 tvOS SDK）"
+fi
+
 # ---------------------------------------------------------------- 汇总
 printf '\n----------------------------------------\n'
 printf 'PASS %d / FAIL %d\n' "$PASS" "$FAIL"

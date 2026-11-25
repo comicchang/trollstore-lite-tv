@@ -89,7 +89,7 @@ open http://192.168.1.23:8787     # 把 ipa 拖进去
 ## 测试
 
 ```sh
-./tests/run.sh          # 不需要设备：45 条断言（语法/plist/用法/注入拦截/卸载护栏/预检判定/Mach-O 解析/demo ipa 与图标/mod 注入/machoscan）
+./tests/run.sh          # 不需要设备：46 条断言（语法/plist/用法/注入拦截/卸载护栏/预检判定/Mach-O 解析/demo ipa 与图标/mod 注入/machoscan/Stage 1 静态闸门）
 ATV_PASS=... ./scripts/accept.sh <ip>   # 需要设备：装/验/启/卸闭环
 ```
 
@@ -153,6 +153,7 @@ CI 覆盖 shellcheck、单元测试、本地打包与 tag 触发的 Release，�
 | [docs/DESIGN-DECISIONS.md](docs/zh/DESIGN-DECISIONS.md) | 为什么这样做，以及五条被证伪的路线 |
 | [docs/PORTING-TROLLSTORE.md](docs/zh/PORTING-TROLLSTORE.md) | 如何把本机制移植进 TrollStore |
 | [docs/FULL-TROLLSTORE-GAP.md](docs/zh/FULL-TROLLSTORE-GAP.md) | 现状总结与原版免越狱 TrollStore（CoreTrust 2）Gap 分析与三道验证闸门 |
+| [docs/VERIFICATION-DESIGN.md](docs/zh/VERIFICATION-DESIGN.md) | 三级最小验证系统设计（隔离边界、双后端契约、Go/No-Go 闸门） |
 | [docs/ROADMAP.md](docs/zh/ROADMAP.md) | 已知缺口与后续计划 |
 | [docs/CREDITS.md](docs/zh/CREDITS.md) | 依赖与致谢（Relaxin / roothide / Procursus / TrollStore） |
 | [CHANGELOG.md](CHANGELOG.md) | 版本记录 |

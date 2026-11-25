@@ -94,7 +94,7 @@ Neither artifact contains any Apple signing material — signing happens on the 
 ## Testing
 
 ```sh
-./tests/run.sh          # no device needed: 45 assertions (syntax / plist / usage / injection blocking / uninstall origin / precheck / Mach-O / demo ipa & icon / mod inject / machoscan)
+./tests/run.sh          # no device needed: 46 assertions (syntax / plist / usage / injection blocking / uninstall origin / precheck / Mach-O / demo ipa & icon / mod inject / machoscan / Stage 1 static gate)
 ATV_PASS=... ./scripts/accept.sh <ip>   # needs a device: install / verify / launch / uninstall
 ```
 
@@ -160,6 +160,7 @@ Licensing and the scope of what we borrowed: [NOTICE](NOTICE). Porting details:
 | [docs/en/DESIGN-DECISIONS.md](docs/en/DESIGN-DECISIONS.md) | Why it is built this way, and the five routes we disproved |
 | [docs/en/PORTING-TROLLSTORE.md](docs/en/PORTING-TROLLSTORE.md) | How to port this mechanism into TrollStore |
 | [docs/en/FULL-TROLLSTORE-GAP.md](docs/en/FULL-TROLLSTORE-GAP.md) | Baseline & gap analysis for full persistent (jailed) TrollStore on tvOS 17.0 |
+| [docs/en/VERIFICATION-DESIGN.md](docs/en/VERIFICATION-DESIGN.md) | Three-stage minimal verification design (isolation boundaries, dual-backend contract, Go/No-Go gates) |
 | [docs/en/ROADMAP.md](docs/en/ROADMAP.md) | Known gaps and what comes next |
 | [docs/en/CREDITS.md](docs/en/CREDITS.md) | Dependencies and credits (Relaxin / roothide / Procursus / TrollStore) |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |

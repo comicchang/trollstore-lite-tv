@@ -26,8 +26,10 @@ ATV_PASS='<device sudo password>' ./scripts/accept.sh 192.168.1.23     # seven s
 | Mach-O parsing | Compiles a tvOS binary on the spot and asserts `platform=3 minos=17.0 cryptid=0` |
 | demo ipa | After building, checks `Payload/TSLTVDemo.app` layout, `Assets.car` icon, `CFBundleExecutable` match and that it really is unsigned |
 | Uninstall origin | CLI `uninstall` refuses `origin=adopt` and still removes `origin=install` |
+| Mod injection | `modinject` writes an `LC_LOAD_DYLIB` (ncmds +1); `machoscan` recognises Mach-O precisely and maps the prefix |
+| Stage 1 gate | `tests/stage1/run.sh`: cross-compiles the minimal CLI and UIKit tvOS units and validates arm64 / platform=3 / minOS 17.0 / cryptid=0 / Info.plist / entitlements (zero device contact) |
 
-Current macOS + tvOS SDK run: **all 44 assertions pass**. Linux CI skips SDK-dependent checks.
+Current macOS + tvOS SDK run: **all 46 assertions pass**. Linux CI skips SDK-dependent checks.
 
 ## CI (.github/workflows/ci.yml)
 
