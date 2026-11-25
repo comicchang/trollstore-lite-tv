@@ -101,31 +101,31 @@ need_jb() {
 }
 
 trust_one() { # <macho> [slot]
-  _p="$1"
-  _slot="${2:-$$}"
+  _to_p="$1"
+  _to_slot="${2:-$$}"
   # 优先直接对目标文件执行 jbctl trustcache add：roothide 下 jbctl 可能会就地 patch 并重算 cdhash，
   # 直接传原路径能确保磁盘文件与内核信任缓存里的 cdhash 完全一致。
-  if "$JBCTL" trustcache add "$_p" >/dev/null 2>&1; then
+  if "$JBCTL" trustcache add "$_to_p" >/dev/null 2>&1; then
     return 0
   fi
   # 若路径触发黑名单，再经真实 /rootfs/var/tmp 绕道，并把可能被 patch 后的文件写回原路径
   if [ -d /rootfs/var/tmp ]; then
-    _ts_name="tsltv-ts.$$.${_slot}"
-    cp "$_p" "/rootfs/var/tmp/$_ts_name" || return 1
-    if "$JBCTL" trustcache add "/var/tmp/$_ts_name" >/dev/null 2>&1; then
-      rm -f "$_p" && cp "/rootfs/var/tmp/$_ts_name" "$_p" && chmod 755 "$_p"
-      rm -f "/rootfs/var/tmp/$_ts_name"
+    _to_name="tsltv-ts.$$.${_to_slot}"
+    cp "$_to_p" "/rootfs/var/tmp/$_to_name" || return 1
+    if "$JBCTL" trustcache add "/var/tmp/$_to_name" >/dev/null 2>&1; then
+      rm -f "$_to_p" && cp "/rootfs/var/tmp/$_to_name" "$_to_p" && chmod 755 "$_to_p"
+      rm -f "/rootfs/var/tmp/$_to_name"
       return 0
     fi
-    rm -f "/rootfs/var/tmp/$_ts_name"
+    rm -f "/rootfs/var/tmp/$_to_name"
   fi
-  _t="$WORK/ts.${_slot}"
-  rm -rf "$_t"; mkdir -p "$_t"
-  cp "$_p" "$_t/bin" || { rm -rf "$_t"; return 1; }
-  if "$JBCTL" trustcache add "$_t/bin" >/dev/null 2>&1; then
-    rm -rf "$_t"; return 0
+  _to_t="$WORK/ts.${_to_slot}"
+  rm -rf "$_to_t"; mkdir -p "$_to_t"
+  cp "$_to_p" "$_to_t/bin" || { rm -rf "$_to_t"; return 1; }
+  if "$JBCTL" trustcache add "$_to_t/bin" >/dev/null 2>&1; then
+    rm -rf "$_to_t"; return 0
   fi
-  rm -rf "$_t"; return 1
+  rm -rf "$_to_t"; return 1
 }
 
 cdhash_of() { # <macho>
