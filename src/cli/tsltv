@@ -100,18 +100,26 @@ need_jb() {
   [ -n "${JBCTL:-}" ] || die "未检测到越狱环境（找不到 .jbroot-*）；这台设备可能没有 roothide 越狱"
 }
 
-trust_one() { # <macho>
+trust_one() { # <macho> [slot]
   _p="$1"
-  # /Applications 与 jbroot 路径在 roothide 下命中 jbctl 路径黑名单，直接绕道 /var/tmp 省一次无效调用
-  case "$_p" in
-    /Applications/*|/var/containers/Bundle/Application/*) ;;
-    *)
-      if "$JBCTL" trustcache add "$_p" >/dev/null 2>&1; then
-        return 0
-      fi
-      ;;
-  esac
-  _t="$WORK/ts.${2:-$$}"
+  _slot="${2:-$$}"
+  # 优先直接对目标文件执行 jbctl trustcache add：roothide 下 jbctl 可能会就地 patch 并重算 cdhash，
+  # 直接传原路径能确保磁盘文件与内核信任缓存里的 cdhash 完全一致。
+  if "$JBCTL" trustcache add "$_p" >/dev/null 2>&1; then
+    return 0
+  fi
+  # 若路径触发黑名单，再经真实 /rootfs/var/tmp 绕道，并把可能被 patch 后的文件写回原路径
+  if [ -d /rootfs/var/tmp ]; then
+    _name="tsltv-ts.$$.${_slot}"
+    cp "$_p" "/rootfs/var/tmp/$_name" || return 1
+    if "$JBCTL" trustcache add "/var/tmp/$_name" >/dev/null 2>&1; then
+      rm -f "$_p" && cp "/rootfs/var/tmp/$_name" "$_p" && chmod 755 "$_p"
+      rm -f "/rootfs/var/tmp/$_name"
+      return 0
+    fi
+    rm -f "/rootfs/var/tmp/$_name"
+  fi
+  _t="$WORK/ts.${_slot}"
   rm -rf "$_t"; mkdir -p "$_t"
   cp "$_p" "$_t/bin" || { rm -rf "$_t"; return 1; }
   if "$JBCTL" trustcache add "$_t/bin" >/dev/null 2>&1; then
@@ -295,7 +303,12 @@ cmd_selfupdate() {
   say "    大小 $(wc -c < "$dl" | tr -d ' ') 字节"
   if command -v dpkg-deb >/dev/null 2>&1; then
     _pkg=$(dpkg-deb -f "$dl" Package 2>/dev/null)
-    say "    包名: ${_pkg:-未知}"
+    _ver=$(dpkg-deb -f "$dl" Version 2>/dev/null)
+    say "    包名: ${_pkg:-未知}  版本: ${_ver:-未知}"
+    [ "$_pkg" = "trollstore-lite-tv" ] || { rm -f "$dl"; die "包名不匹配（期望 trollstore-lite-tv，实际 ${_pkg:-空}），拒绝安装"; }
+  else
+    rm -f "$dl"
+    die "缺少 dpkg-deb，无法校验更新包"
   fi
   say "==> 交给 dpkg 安装（后台执行，约 10 秒）"
   ( sleep 1; dpkg -i "$dl" > "$log" 2>&1 ) >/dev/null 2>&1 &
@@ -375,21 +388,34 @@ cmd_mods() { # list | apply <bundle-id> <dylib>
       _p=$(state_path "$_bid")
       [ -d "$_p" ] || die "记账里没有这个应用: $_bid"
       _exe=$(exe_of "$_p")
-      # modinject 是普通二进制（未打 vroot 补丁），要用 jbroot 下的真实路径
-      _real="$JB$_p"   # /Applications/... → <jbroot>/Applications/...
       [ -x "$_p/$_exe" ] || die "找不到主程序: $_p/$_exe"
 
       _name=$(basename "$_src")
-      mkdir -p "$_p/Frameworks"
+      mkdir -p "$_p/Frameworks" "$WORK"
       cp "$_src" "$_p/Frameworks/$_name" || die "复制 dylib 失败"
       say "注入 @executable_path/Frameworks/$_name → $_exe"
-      "$BASE/modinject" "$_real/$_exe" "@executable_path/Frameworks/$_name" || die "注入失败（头部空隙不足？）"
+      # modinject 为非 vroot 进程，直接写 .jbroot/Applications 会触发 EPERM；经 /rootfs/var/tmp 桥接注入后换新 inode 写回
+      if [ -d /rootfs/var/tmp ]; then
+        _mstage="/rootfs/var/tmp/tsltv-mod.$$.bin"
+        _mview="/var/tmp/tsltv-mod.$$.bin"
+      else
+        _mstage="$WORK/mod.$$.bin"
+        _mview="$_mstage"
+      fi
+      cp "$_p/$_exe" "$_mstage" || die "暂存主程序失败"
+      "$BASE/modinject" "$_mview" "@executable_path/Frameworks/$_name" || { rm -f "$_mstage"; die "注入失败（头部空隙不足？）"; }
+      rm -f "$_p/$_exe"
+      cp "$_mstage" "$_p/$_exe" && chmod 755 "$_p/$_exe" || { rm -f "$_mstage"; die "写回主程序失败"; }
+      rm -f "$_mstage"
 
-      # 主程序与 dylib 都要重签 + 重新入信任缓存
-      sign_one "$_p/$_exe" "" || die "主程序签名失败"
-      trust_one "$_p/$_exe" || die "主程序信任注入失败"
-      sign_one "$_p/Frameworks/$_name" "" || die "dylib 签名失败"
-      trust_one "$_p/Frameworks/$_name" || die "dylib 信任注入失败"
+      # 主程序保留完整 entitlements 重签，dylib 以纯 ad-hoc 双哈希签名，两者重新入信任缓存
+      mkdir -p "$WORK"
+      gen_ent "$_bid" "$WORK/ent.plist"
+      sign_one "$_p/$_exe" "$WORK/ent.plist" || { rm -rf "$WORK"; die "主程序签名失败"; }
+      trust_one "$_p/$_exe" 1 || { rm -rf "$WORK"; die "主程序信任注入失败"; }
+      sign_one "$_p/Frameworks/$_name" "$WORK/ent.plist" || { rm -rf "$WORK"; die "dylib 签名失败"; }
+      trust_one "$_p/Frameworks/$_name" 2 || { rm -rf "$WORK"; die "dylib 信任注入失败"; }
+      rm -rf "$WORK" 2>/dev/null || true
 
       _cd=$(cdhash_of "$_p/$_exe" 2>/dev/null)
       state_add "$_bid" "$_p" "$_cd" "$(state_origin "$_bid")" 2>/dev/null || true
@@ -490,12 +516,23 @@ cmd_probe() {
   _ui=$(uicache -l 2>/dev/null)
   while IFS='	' read -r bid path cd _ts origin; do
     [ -n "$bid" ] || continue
-    # 列表用记账里的 cdhash（安装/纳入时算好的），不重新跑 ldid —— 否则整页要好几秒
+    # 列表优先用记账 cdhash；若未命中信任缓存，回查真实文件 cdhash（避免重签/升级后误报 ✗）
     cd2="$cd"
     trusted=0
     if [ -n "$cd2" ]; then
       trusted=$(printf '%s' "$_tc" | grep -ic -- "$cd2")
       [ "$trusted" -ge 1 ] && trusted=1 || trusted=0
+    fi
+    if [ "$trusted" -eq 0 ] && [ -d "$path" ]; then
+      _ex=$(exe_of "$path")
+      if [ -n "$_ex" ] && [ -f "$path/$_ex" ]; then
+        _live_cd=$(cdhash_of "$path/$_ex")
+        if [ -n "$_live_cd" ]; then
+          cd2="$_live_cd"
+          trusted=$(printf '%s' "$_tc" | grep -ic -- "$cd2")
+          [ "$trusted" -ge 1 ] && trusted=1 || trusted=0
+        fi
+      fi
     fi
     reg=$(printf '%s' "$_ui" | grep -c -- "$bid")
     [ "$reg" -ge 1 ] && reg=1 || reg=0
@@ -612,14 +649,51 @@ cmd_trust() {
     retrust)
       state_init
       [ -s "$STATE" ] || die "记账为空，没有可重放的对象"
-      ok=0; badn=0
-      while IFS='	' read -r bid path cd _ts; do
+      rm -rf "$WORK"; mkdir -p "$WORK/rt"
+      apps=0; ok=0; badn=0; _idx=0; _jobs=0
+      while IFS='	' read -r bid path cd _ts _orig; do
         [ -n "$path" ] || continue
-        exe="$path/$(exe_of "$path")"
-        [ -f "$exe" ] || { badn=$((badn+1)); continue; }
-        if trust_one "$exe"; then ok=$((ok+1)); else badn=$((badn+1)); fi
+        [ -d "$path" ] || { badn=$((badn+1)); continue; }
+        apps=$((apps+1))
+        : > "$WORK/rt.list"
+        if [ -x "$BASE/machoscan" ]; then
+          if [ -n "$JB" ] && [ -d "$JB$path" ]; then
+            "$BASE/machoscan" "$JB$path" "$path" > "$WORK/rt.list" 2>/dev/null || true
+          else
+            "$BASE/machoscan" "$path" "$path" > "$WORK/rt.list" 2>/dev/null || true
+          fi
+        fi
+        if [ ! -s "$WORK/rt.list" ]; then
+          _ex=$(exe_of "$path")
+          [ -n "$_ex" ] && [ -f "$path/$_ex" ] && printf '%s\n' "$path/$_ex" > "$WORK/rt.list"
+        fi
+        while IFS= read -r _mf; do
+          [ -n "$_mf" ] || continue
+          _idx=$((_idx+1))
+          (
+            if trust_one "$_mf" "$_idx"; then
+              echo ok > "$WORK/rt/$_idx"
+            else
+              echo bad > "$WORK/rt/$_idx"
+            fi
+          ) &
+          _jobs=$((_jobs+1))
+          if [ "$_jobs" -ge 4 ]; then
+            wait
+            _jobs=0
+          fi
+        done < "$WORK/rt.list"
       done < "$STATE"
-      say "重放完成: ok=$ok bad=$badn"
+      wait
+      for _rf in "$WORK/rt"/*; do
+        [ -f "$_rf" ] || continue
+        case "$(cat "$_rf" 2>/dev/null)" in
+          ok) ok=$((ok+1)) ;;
+          *)  badn=$((badn+1)) ;;
+        esac
+      done
+      rm -rf "$WORK" 2>/dev/null || true
+      say "重放完成: apps=$apps ok=$ok bad=$badn"
       ;;
     *) die "用法: tsltv trust [status|retrust]" ;;
   esac

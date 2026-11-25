@@ -209,6 +209,18 @@ EOP
     if [ "$after" = "$((before + 1))" ]; then ok "注入成功（ncmds ${before}→${after}）"; else bad "ncmds 未增加（${before}→${after}）"; fi
     # 注意：macOS 的 strings 不扫 Mach-O 头部，load command 只能用二进制 grep
     if grep -aq "@executable_path/Frameworks/x.dylib" "$TMP/host"; then ok "加载命令已写入"; else bad "找不到注入的路径"; fi
+    # 编译宿主 machoscan 并验证能准确识别 Mach-O 而跳过普通文件
+    if cc -O2 "$ROOT/src/tools/machoscan.c" -o "$TMP/ms" 2>/dev/null; then
+      mkdir -p "$TMP/scandir/sub"
+      cp "$TMP/host" "$TMP/scandir/sub/bin"
+      printf 'plain text\n' > "$TMP/scandir/readme.txt"
+      ms_out=$("$TMP/ms" "$TMP/scandir" "/Apps/Test.app" 2>/dev/null)
+      if [ "$ms_out" = "/Apps/Test.app/sub/bin" ]; then
+        ok "machoscan 精准识别 Mach-O 并映射前缀"
+      else
+        bad "machoscan 输出异常: $ms_out"
+      fi
+    fi
   else
     ok "跳过 mod 注入（编译失败）"
   fi

@@ -9,14 +9,15 @@
 #import <mach-o/loader.h>
 #import <mach-o/fat.h>
 #import <fcntl.h>
+#import <sys/stat.h>
 #import <unistd.h>
 #import <errno.h>
 
 static uint32_t align8(uint32_t n) { return (n + 7) & ~7u; }
 
 static BOOL inject(NSString *bin, NSString *dylibPath, NSString **err) {
-    // 用 POSIX I/O：Foundation 的 writeToFile 在 vroot 路径上会报权限错误
-    int fd = open(bin.fileSystemRepresentation, O_RDWR);
+    // 只读打开源文件，修改后的内容原子写到同目录 .modtmp 再 rename 替换
+    int fd = open(bin.fileSystemRepresentation, O_RDONLY);
     if (fd < 0) { *err = [NSString stringWithFormat:@"打不开文件: %s", strerror(errno)]; return NO; }
     off_t fsize = lseek(fd, 0, SEEK_END);
     if (fsize <= 0) { close(fd); *err = @"文件为空"; return NO; }
@@ -79,10 +80,37 @@ static BOOL inject(NSString *bin, NSString *dylibPath, NSString **err) {
     mh->ncmds = ncmds + 1;
     mh->sizeofcmds = sizeofcmds + need;
 
-    lseek(fd, 0, SEEK_SET);
-    ssize_t put = write(fd, data.bytes, (size_t)fsize);
+    // 写到同目录临时文件再原子 rename：换新 inode，避免覆写正在/曾经执行过的 Mach-O 触发 EPERM 或 Darwin CS_VALID 失效
     close(fd);
-    if (put != fsize) { *err = [NSString stringWithFormat:@"写回失败: %s", strerror(errno)]; return NO; }
+    NSString *tmpPath = [bin stringByAppendingString:@".modtmp"];
+    int wfd = open(tmpPath.fileSystemRepresentation, O_CREAT | O_WRONLY | O_TRUNC, 0755);
+    if (wfd < 0) {
+        *err = [NSString stringWithFormat:@"创建临时文件失败: %s", strerror(errno)];
+        return NO;
+    }
+    const uint8_t *wp = (const uint8_t *)data.bytes;
+    size_t left = (size_t)fsize;
+    while (left > 0) {
+        ssize_t w = write(wfd, wp, left);
+        if (w <= 0) {
+            if (errno == EINTR) continue;
+            int e = errno;
+            close(wfd);
+            unlink(tmpPath.fileSystemRepresentation);
+            *err = [NSString stringWithFormat:@"写回失败: %s", strerror(e)];
+            return NO;
+        }
+        wp += w;
+        left -= (size_t)w;
+    }
+    close(wfd);
+    chmod(tmpPath.fileSystemRepresentation, 0755);
+    if (rename(tmpPath.fileSystemRepresentation, bin.fileSystemRepresentation) != 0) {
+        int e = errno;
+        unlink(tmpPath.fileSystemRepresentation);
+        *err = [NSString stringWithFormat:@"原子替换失败: %s", strerror(e)];
+        return NO;
+    }
     return YES;
 }
 

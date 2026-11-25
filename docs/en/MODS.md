@@ -88,5 +88,5 @@ HTML5 engine loading `https://www.youtube.com/tv`. Therefore:
 
 ## Status
 
-- ✅ The CLI includes `tsltv mods list` and `tsltv mods apply` (since 2.1.3).
-- ⚠️ The v2.1.4 handover reports `EPERM` from device-side `mods apply`; a v2.1.5 device recheck is pending. There is still no mod registry or one-click catalog.
+- ✅ The CLI includes `tsltv mods list` and `tsltv mods apply` (since 2.1.3); v2.1.6 fixes device-side `EPERM` via `/rootfs/var/tmp` staging + atomic `rename()` and preserves full app entitlements (verified on device).
+- ✅ Since v2.1.6, the web store on `:8787` also hosts a local Tampermonkey-style userscript bundle (`/api/userscripts.js`) for YouTube TV (Cobalt) hot-reloading without repackaging IPAs.

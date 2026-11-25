@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.6 — 2026-11-25
+
+- **修复 roothide vroot 路径桥接根因（trustcache + modinject）**：
+  - `trust_one()` 与 `postinst.sh` 改经 `/rootfs/var/tmp`（真实 `/private/var/tmp`）桥接调用 `jbctl trustcache add /var/tmp/...`，修复 vroot shell 中 `/var/tmp` 指向 `.jbroot/var/tmp` 导致新签名二进制（如 `TSLTVDemo`）未被真正写入内核信任缓存的问题。
+  - `tsltv mods apply` 改经 `/rootfs/var/tmp` 桥接调用 `modinject`（`O_RDONLY` + 同目录原子 `rename` 换新 inode），并补齐主程序完整 entitlements（不再以空字符串清空权限），彻底解决 2.1.4 以来设备端 `mods apply` 的 `EPERM` 缺陷。
+- **全量 Mach-O `retrust`**：`tsltv trust retrust` 改用 `machoscan` 并发重放每个已安装应用的全部 Mach-O（含 Frameworks / `.dylib` / `.so`，实测 7 应用共 161 个 Mach-O 全部通过），重启重新越狱后多动态库应用（如 Kodi）与已注入 mod 均不会缺信任。
+- **修复 `installed.tsv` cdhash 失步**：`postinst.sh` 重签 `TrollStoreLiteTV` 后自动同步记账 cdhash；`tsltv probe` 遇记账哈希未命中时自动回查实时文件 cdhash，消除网页/TV 端误报 `信任 ✗`。
+- **网页商店首页秒开 + 内置油猴脚本托管**：
+  - `tsltvweb :8787` 启用启动预热与后台异步刷新缓存，实测 `GET /` 从 **9.16s** 降至 **0.036s**。
+  - 新增本地油猴脚本管理与托管接口（`/api/userscripts.js`、`/api/userscripts/{save,toggle,delete}`，持久化存放在 `/var/mobile/Library/tsltv-userscripts`），支持直接为 YouTube TV（Cobalt）本地离线热加载 TizenTube 及自定义 `.js` 脚本。
+- **`selfupdate` 包名校验**：下载后用 `dpkg-deb -f Package` 校验必须为 `trollstore-lite-tv`，拒绝错误或损坏的 `.deb`。
+- 测试新增 `machoscan` 断言（45 条全过）。
+
 ## 2.1.5 — 2026-11-24
 
 - 卸载只允许 `origin=install`；`adopt` 与来源缺失的旧条目拒绝删除。

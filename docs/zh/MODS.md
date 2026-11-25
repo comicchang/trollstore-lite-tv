@@ -83,5 +83,5 @@ tsltv install Foo-modded.ipa
 
 ## 现状
 
-- ✅ CLI 已包含 `tsltv mods list` / `tsltv mods apply`（2.1.3 起）。
-- ⚠️ 2.1.4 交接记录中的真机 `mods apply` 仍报 `EPERM`；2.1.5 真机复验待完成。当前没有 mod 仓库或一键目录安装。
+- ✅ CLI 已包含 `tsltv mods list` / `tsltv mods apply`（2.1.3 起），2.1.6 通过 `/rootfs/var/tmp` 桥接 + 原子替换彻底修复了设备端 `EPERM` 问题并补齐主程序完整 entitlements（真机实测通过）。
+- ✅ 网页商店 `:8787` 在 2.1.6 起内置「油猴脚本管理」（`/api/userscripts.js`），可本地托管 TizenTube 与自定义 `.js` 供 YouTube TV（Cobalt）免重打包热加载。

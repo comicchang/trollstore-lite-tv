@@ -46,6 +46,15 @@ sign_and_trust() {
     return 1
   }
   if ! "$JBCTL" trustcache add "$file" >/dev/null 2>&1; then
+    if [ -d /rootfs/var/tmp ]; then
+      cp "$file" "/rootfs/var/tmp/tsltv-postinst.bin" && \
+        "$JBCTL" trustcache add "/var/tmp/tsltv-postinst.bin" >/dev/null 2>&1 && {
+          rm -f "$file" && cp "/rootfs/var/tmp/tsltv-postinst.bin" "$file" && chmod 755 "$file"
+          rm -f "/rootfs/var/tmp/tsltv-postinst.bin"
+          return 0
+        }
+      rm -f "/rootfs/var/tmp/tsltv-postinst.bin"
+    fi
     cp "$file" "$TRUST_TMP" && "$JBCTL" trustcache add "$TRUST_TMP" >/dev/null 2>&1 || {
       rm -f "$TRUST_TMP"
       echo "信任注入失败: $file" >&2
@@ -61,6 +70,16 @@ sign_and_trust "$BIN/wake" com.trollstorelite.tv.wake
 sign_and_trust "$BIN/modinject" com.trollstorelite.tv.modinject
 sign_and_trust "$BIN/machoscan" com.trollstorelite.tv.machoscan
 sign_and_trust "$APP/TrollStoreLiteTV" com.trollstorelite.tv
+
+# 若记账清单里已有 TrollStoreLiteTV，同步更新重签后的 cdhash，避免首页误报信任异常
+STATE="$BIN/installed.tsv"
+if [ -f "$STATE" ] && grep -q '^com\.trollstorelite\.tv	' "$STATE" 2>/dev/null; then
+  NEW_CD=$("$LDID" -h "$APP/TrollStoreLiteTV" 2>/dev/null | sed -n 's/.*CandidateCDHash sha256=//p' | head -1)
+  if [ -n "$NEW_CD" ]; then
+    awk -F'\t' -v OFS='\t' -v cd="$NEW_CD" '$1=="com.trollstorelite.tv"{$3=cd} {print}' \
+      "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE" || rm -f "$STATE.tmp"
+  fi
+fi
 
 mkdir -p /var/tmp/tsltv-inbox
 chmod 777 /var/tmp/tsltv-inbox

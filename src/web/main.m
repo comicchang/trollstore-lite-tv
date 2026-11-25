@@ -148,6 +148,7 @@ static NSData *HttpResponse(int code, NSString *ctype, NSData *body) {
     NSMutableData *d = [NSMutableData data];
     NSString *head = [NSString stringWithFormat:
         @"HTTP/1.1 %d %@\r\nContent-Type: %@\r\nContent-Length: %lu\r\n"
+        @"Access-Control-Allow-Origin: *\r\n"
         @"Cache-Control: no-store\r\nConnection: close\r\n\r\n",
         code, reason, ctype, (unsigned long)body.length];
     [d appendData:[head dataUsingEncoding:NSUTF8StringEncoding]];
@@ -218,23 +219,152 @@ static NSString *TVCachedVersion(void) {
     return cached;
 }
 
-// 首页用的探测结果：命中缓存就立刻用，否则最多等 5 秒；
-// 引擎忙的时候宁可用上一次的数据，也不让整个页面卡住。
-static NSString *ProbeForPage(void) {
-    static NSString *cached = nil;
-    static time_t at = 0;
-    time_t now = time(NULL);
-    if (cached && (now - at) < 15) return cached;
+// 异步探测缓存：命中立即返回（<50ms），过期在后台刷新，不阻塞首页打开
+static pthread_mutex_t gProbeMu = PTHREAD_MUTEX_INITIALIZER;
+static NSString *gProbeRows = nil;
+static time_t gProbeAt = 0;
+static BOOL gProbeRefreshing = NO;
 
+static void *ProbeRefreshThread(void *arg) {
+    (void)arg;
+    @autoreleasepool {
+        int rc = 0;
+        NSString *rows = ATDaemonTimeout(@"probe", 15, &rc);
+        pthread_mutex_lock(&gProbeMu);
+        if (rows.length > 0 && ![rows hasPrefix:@"daemon 超时"] && ![rows hasPrefix:@"daemon 不可用"]) {
+            gProbeRows = rows;
+            gProbeAt = time(NULL);
+        }
+        gProbeRefreshing = NO;
+        pthread_mutex_unlock(&gProbeMu);
+    }
+    return NULL;
+}
+
+static void RefreshProbeAsync(void) {
+    pthread_mutex_lock(&gProbeMu);
+    if (gProbeRefreshing) {
+        pthread_mutex_unlock(&gProbeMu);
+        return;
+    }
+    gProbeRefreshing = YES;
+    pthread_mutex_unlock(&gProbeMu);
+    pthread_t th;
+    if (pthread_create(&th, NULL, ProbeRefreshThread, NULL) == 0) {
+        pthread_detach(th);
+    } else {
+        pthread_mutex_lock(&gProbeMu);
+        gProbeRefreshing = NO;
+        pthread_mutex_unlock(&gProbeMu);
+    }
+}
+
+static void InvalidateProbeCache(void) {
+    pthread_mutex_lock(&gProbeMu);
+    gProbeAt = 0;
+    pthread_mutex_unlock(&gProbeMu);
+    RefreshProbeAsync();
+}
+
+static NSString *ProbeForPage(void) {
+    time_t now = time(NULL);
+    pthread_mutex_lock(&gProbeMu);
+    NSString *cached = gProbeRows;
+    time_t at = gProbeAt;
+    pthread_mutex_unlock(&gProbeMu);
+
+    if (cached) {
+        if ((now - at) >= 15) RefreshProbeAsync();
+        return cached;
+    }
     int rc = 0;
     NSString *rows = ATDaemonTimeout(@"probe", 5, &rc);
-    // 注意：probe 在有异常项（缺信任/缺注册）时退出码非 0，但输出仍然有效，
-    // 不能因为 rc 就把整页列表丢掉。
-    if (rows.length > 0 && ![rows hasPrefix:@"daemon 超时"]) {
-        cached = rows; at = now; return cached;
+    if (rows.length > 0 && ![rows hasPrefix:@"daemon 超时"] && ![rows hasPrefix:@"daemon 不可用"]) {
+        pthread_mutex_lock(&gProbeMu);
+        gProbeRows = rows;
+        gProbeAt = time(NULL);
+        pthread_mutex_unlock(&gProbeMu);
+        return rows;
     }
-    if (cached) return cached;
+    RefreshProbeAsync();
     return @"";
+}
+
+#pragma mark - 油猴脚本托管（供 YouTube TV / Cobalt 本地热加载）
+
+static NSString *const kUserscriptsDir = @"/var/mobile/Library/tsltv-userscripts";
+static pthread_mutex_t gUSMu = PTHREAD_MUTEX_INITIALIZER;
+static unsigned long gUSHits = 0;
+static time_t gUSLastHit = 0;
+
+static NSString *UserscriptsDir(void) {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:kUserscriptsDir]) {
+        [fm createDirectoryAtPath:kUserscriptsDir withIntermediateDirectories:YES
+                       attributes:@{NSFilePosixPermissions: @0755} error:nil];
+    }
+    return kUserscriptsDir;
+}
+
+static BOOL SafeScriptName(NSString *s) {
+    if (!SafeToken(s)) return NO;
+    if ([s containsString:@".."]) return NO;
+    return [s hasSuffix:@".js"];
+}
+
+static NSString *UserscriptsBundleJS(void) {
+    NSString *dir = UserscriptsDir();
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray<NSString *> *items = [[fm contentsOfDirectoryAtPath:dir error:nil]
+                                  sortedArrayUsingSelector:@selector(compare:)];
+    NSMutableString *js = [NSMutableString stringWithString:
+        @"/* TrollStore Lite TV Userscripts Bundle */\n"];
+    NSUInteger loaded = 0;
+    for (NSString *name in items) {
+        if (![name hasSuffix:@".js"] || [name hasPrefix:@"."]) continue;
+        NSString *p = [dir stringByAppendingPathComponent:name];
+        NSString *src = [NSString stringWithContentsOfFile:p encoding:NSUTF8StringEncoding error:nil];
+        if (!src.length) continue;
+        loaded++;
+        [js appendFormat:@"\n/* === %@ === */\n(function(){try{\n%@\n}catch(e){console.error('[tsltv-us %@]',e);}})();\n",
+         name, src, name];
+    }
+    [js appendFormat:@"\nwindow.__tsltvUserscriptsLoaded=%lu;\n", (unsigned long)loaded];
+    pthread_mutex_lock(&gUSMu);
+    gUSHits++;
+    gUSLastHit = time(NULL);
+    pthread_mutex_unlock(&gUSMu);
+    return js;
+}
+
+static NSString *UserscriptsTableHTML(NSUInteger *countOut) {
+    NSString *dir = UserscriptsDir();
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray<NSString *> *items = [[fm contentsOfDirectoryAtPath:dir error:nil]
+                                  sortedArrayUsingSelector:@selector(compare:)];
+    NSMutableString *tr = [NSMutableString string];
+    NSUInteger cnt = 0;
+    for (NSString *item in items) {
+        if ([item hasPrefix:@"."]) continue;
+        BOOL enabled = [item hasSuffix:@".js"];
+        BOOL disabled = [item hasSuffix:@".js.disabled"];
+        if (!enabled && !disabled) continue;
+        NSString *baseName = enabled ? item : [item substringToIndex:item.length - 9];
+        NSDictionary *attr = [fm attributesOfItemAtPath:[dir stringByAppendingPathComponent:item] error:nil];
+        unsigned long long sz = [attr fileSize];
+        cnt++;
+        [tr appendFormat:
+            @"<tr><td class=bid>%@</td><td class=dim>%.1f KB</td>"
+             "<td class=%@>%@</td>"
+             "<td><button onclick=\"usAct('toggle','%@')\">%@</button> "
+             "<button class=del onclick=\"usAct('delete','%@')\">删除</button></td></tr>",
+            Esc(baseName), (double)sz / 1024.0,
+            enabled ? @"ok" : @"dim", enabled ? @"已启用" : @"已停用",
+            Esc(baseName), enabled ? @"停用" : @"启用",
+            Esc(baseName)];
+    }
+    if (countOut) *countOut = cnt;
+    return tr;
 }
 
 static NSString *PageHTML(void) {
@@ -300,7 +430,35 @@ static NSString *PageHTML(void) {
                     "<button onclick=\"selfUpd()\" style='background:#238636'>更新自身</button>"
                     "<span class=dim style='margin-left:12px;font-size:13px'>"
                     "把新版 deb 的直链填进弹出的输入框（package: trollstore-lite-tv）</span></div>"];
-    [h appendFormat:@"<div id=log>就绪。已安装 %lu 个应用。</div>", (unsigned long)count];
+    NSUInteger usCount = 0;
+    NSString *usTr = UserscriptsTableHTML(&usCount);
+    pthread_mutex_lock(&gUSMu);
+    unsigned long hits = gUSHits;
+    time_t lastHit = gUSLastHit;
+    pthread_mutex_unlock(&gUSMu);
+    NSString *hitInfo = @"尚未被拉取";
+    if (hits > 0 && lastHit > 0) {
+        struct tm tmv;
+        localtime_r(&lastHit, &tmv);
+        char tbuf[32];
+        strftime(tbuf, sizeof(tbuf), "%H:%M:%S", &tmv);
+        hitInfo = [NSString stringWithFormat:@"已拉取 %lu 次（最近 %s）", hits, tbuf];
+    }
+    [h appendFormat:@"<h2 style='font-size:17px;margin:28px 0 6px'>油猴脚本（YouTube TV / Cobalt 本地热加载）</h2>"
+                    "<div class=dim style='font-size:13px;margin-bottom:12px'>"
+                    "脚本入口：<span class=mono>http://127.0.0.1:8787/api/userscripts.js</span> · %@ · "
+                    "<input type=file id=jsf accept='.js' style='display:none'>"
+                    "<label for=jsf style='color:#1f6feb;cursor:pointer'>上传 .js 脚本</label></div>",
+                    Esc(hitInfo)];
+    [h appendString:@"<table><thead><tr><th>脚本</th><th>大小</th><th>状态</th><th></th></tr></thead><tbody>"];
+    if (usCount > 0) {
+        [h appendString:usTr];
+    } else {
+        [h appendString:@"<tr><td colspan=4 class=dim>暂无脚本（上传 .js 后重启 YouTube TVL 自动生效）</td></tr>"];
+    }
+    [h appendString:@"</tbody></table>"];
+    [h appendFormat:@"<div id=log>就绪。已安装 %lu 个应用，%lu 个油猴脚本。</div>",
+     (unsigned long)count, (unsigned long)usCount];
     [h appendString:@"<script>"
         "const log=(t)=>{document.getElementById('log').textContent=t};"
         "async function act(cmd,arg){"
@@ -308,6 +466,15 @@ static NSString *PageHTML(void) {
         "log('执行 '+cmd+(arg?' '+arg:'')+' …');"
         "const r=await fetch('/api/'+cmd+(arg?'?bid='+encodeURIComponent(arg):'')+'',{method:'POST'});"
         "log(await r.text());setTimeout(()=>location.reload(),1200)}"
+        "async function usAct(cmd,name){"
+        "if(cmd==='delete'&&!confirm('确定删除脚本 '+name+' ?'))return;"
+        "const r=await fetch('/api/userscripts/'+cmd+'?name='+encodeURIComponent(name),{method:'POST'});"
+        "log(await r.text());setTimeout(()=>location.reload(),600)}"
+        "async function uploadJS(file){"
+        "log('上传脚本 '+file.name+'…');"
+        "const r=await fetch('/api/userscripts/save?name='+encodeURIComponent(file.name),{method:'POST',body:file});"
+        "log(await r.text());setTimeout(()=>location.reload(),600)}"
+        "document.getElementById('jsf').onchange=e=>e.target.files[0]&&uploadJS(e.target.files[0]);"
         "async function selfUpd(){"
         "const u=prompt('新版 deb 的 http 直链：','');if(!u)return;"
         "log('正在下载并交给 dpkg…');"
@@ -467,6 +634,7 @@ static NSData *HandleRequest(NSString *head, NSData *preBody, int fd) {
         NSString *out = ATDaemonTimeout([NSString stringWithFormat:@"install %@", dest], 300, &rc);
         double instSec = CFAbsoluteTimeGetCurrent() - t1;
         [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
+        InvalidateProbeCache();
         NSString *summary = [NSString stringWithFormat:@"[上传 %.1f MB / %.1fs (%.1f MB/s) · 安装 %.1fs]\n%@",
                              (double)got / 1048576.0, upSec, ((double)got / 1048576.0) / upSec, instSec, out];
         return HttpResponse(rc == 0 ? 200 : 500, @"text/plain; charset=utf-8",
@@ -479,6 +647,7 @@ static NSData *HandleRequest(NSString *head, NSData *preBody, int fd) {
         }
         int rc = 0;
         NSString *out = ATDaemon([NSString stringWithFormat:@"uninstall %@", bid], &rc);
+        InvalidateProbeCache();
         return HttpResponse(rc == 0 ? 200 : 500, @"text/plain; charset=utf-8",
                             [out dataUsingEncoding:NSUTF8StringEncoding]);
     }
@@ -501,7 +670,93 @@ static NSData *HandleRequest(NSString *head, NSData *preBody, int fd) {
     if ([method isEqualToString:@"POST"] && [path isEqualToString:@"/api/trust"]) {
         int rc = 0;
         NSString *out = ATDaemon(@"trust retrust", &rc);
+        InvalidateProbeCache();
         return HttpResponse(200, @"text/plain; charset=utf-8", [out dataUsingEncoding:NSUTF8StringEncoding]);
+    }
+    if ([method isEqualToString:@"GET"] && [path isEqualToString:@"/api/userscripts.js"]) {
+        NSString *js = UserscriptsBundleJS();
+        return HttpResponse(200, @"application/javascript; charset=utf-8",
+                            [js dataUsingEncoding:NSUTF8StringEncoding]);
+    }
+    if ([method isEqualToString:@"POST"] && [path isEqualToString:@"/api/userscripts/save"]) {
+        NSString *name = qv[@"name"] ?: @"";
+        if (!SafeScriptName(name)) {
+            return HttpResponse(400, @"text/plain; charset=utf-8", [@"非法脚本名（只允许安全字符且以 .js 结尾）" dataUsingEncoding:NSUTF8StringEncoding]);
+        }
+        NSString *clenKey = nil;
+        for (NSString *l in lines) {
+            if ([[l lowercaseString] hasPrefix:@"content-length:"]) clenKey = l;
+        }
+        NSUInteger want = clenKey ? (NSUInteger)[[clenKey substringFromIndex:15]
+                                  stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]].integerValue : 0;
+        if (want == 0 || want > 8 * 1024 * 1024) {
+            return HttpResponse(400, @"text/plain; charset=utf-8", [@"脚本大小需在 1 B ~ 8 MB 之间" dataUsingEncoding:NSUTF8StringEncoding]);
+        }
+        NSString *dir = UserscriptsDir();
+        NSString *dest = [dir stringByAppendingPathComponent:name];
+        int wfd = open(dest.fileSystemRepresentation, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        if (wfd < 0) {
+            return HttpResponse(500, @"text/plain; charset=utf-8", [@"无法写入脚本文件" dataUsingEncoding:NSUTF8StringEncoding]);
+        }
+        NSUInteger got = 0;
+        uint8_t buf[65536];
+        if (preBody.length > 0) {
+            size_t n0 = preBody.length > want ? want : preBody.length;
+            write(wfd, preBody.bytes, n0);
+            got = n0;
+        }
+        while (got < want) {
+            size_t room = sizeof(buf);
+            if (want - got < room) room = want - got;
+            ssize_t n = read(fd, buf, room);
+            if (n <= 0) { if (n < 0 && errno == EINTR) continue; break; }
+            if (write(wfd, buf, (size_t)n) != n) break;
+            got += (NSUInteger)n;
+        }
+        close(wfd);
+        if (got < want) {
+            [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
+            return HttpResponse(400, @"text/plain; charset=utf-8", [@"脚本上传不完整" dataUsingEncoding:NSUTF8StringEncoding]);
+        }
+        [[NSFileManager defaultManager] removeItemAtPath:[dest stringByAppendingString:@".disabled"] error:nil];
+        return HttpResponse(200, @"text/plain; charset=utf-8",
+                            [[NSString stringWithFormat:@"已保存脚本 %@ (%lu 字节)，重启 YouTube TVL 生效", name, (unsigned long)got]
+                             dataUsingEncoding:NSUTF8StringEncoding]);
+    }
+    if ([method isEqualToString:@"POST"] && [path isEqualToString:@"/api/userscripts/toggle"]) {
+        NSString *name = qv[@"name"] ?: @"";
+        if (!SafeScriptName(name)) {
+            return HttpResponse(400, @"text/plain; charset=utf-8", [@"非法脚本名" dataUsingEncoding:NSUTF8StringEncoding]);
+        }
+        NSString *dir = UserscriptsDir();
+        NSString *onP = [dir stringByAppendingPathComponent:name];
+        NSString *offP = [onP stringByAppendingString:@".disabled"];
+        NSFileManager *fm = [NSFileManager defaultManager];
+        if ([fm fileExistsAtPath:onP]) {
+            [fm moveItemAtPath:onP toPath:offP error:nil];
+            return HttpResponse(200, @"text/plain; charset=utf-8",
+                                [[NSString stringWithFormat:@"已停用 %@", name] dataUsingEncoding:NSUTF8StringEncoding]);
+        }
+        if ([fm fileExistsAtPath:offP]) {
+            [fm moveItemAtPath:offP toPath:onP error:nil];
+            return HttpResponse(200, @"text/plain; charset=utf-8",
+                                [[NSString stringWithFormat:@"已启用 %@", name] dataUsingEncoding:NSUTF8StringEncoding]);
+        }
+        return HttpResponse(404, @"text/plain; charset=utf-8", [@"找不到该脚本" dataUsingEncoding:NSUTF8StringEncoding]);
+    }
+    if ([method isEqualToString:@"POST"] && [path isEqualToString:@"/api/userscripts/delete"]) {
+        NSString *name = qv[@"name"] ?: @"";
+        if (!SafeScriptName(name)) {
+            return HttpResponse(400, @"text/plain; charset=utf-8", [@"非法脚本名" dataUsingEncoding:NSUTF8StringEncoding]);
+        }
+        NSString *dir = UserscriptsDir();
+        NSString *onP = [dir stringByAppendingPathComponent:name];
+        NSString *offP = [onP stringByAppendingString:@".disabled"];
+        NSFileManager *fm = [NSFileManager defaultManager];
+        [fm removeItemAtPath:onP error:nil];
+        [fm removeItemAtPath:offP error:nil];
+        return HttpResponse(200, @"text/plain; charset=utf-8",
+                            [[NSString stringWithFormat:@"已删除 %@", name] dataUsingEncoding:NSUTF8StringEncoding]);
     }
     return HttpResponse(404, @"text/plain", [@"not found" dataUsingEncoding:NSUTF8StringEncoding]);
 }
@@ -555,6 +810,8 @@ int main(int argc, char *argv[]) {
 
         fprintf(stdout, "tsltvweb listening on 0.0.0.0:%d\n", port);
         fflush(stdout);
+        // 启动后后台预热应用列表缓存，避免首次访问 GET / 卡顿
+        RefreshProbeAsync();
 
         for (;;) {
             struct sockaddr_in c;
