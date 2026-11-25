@@ -90,3 +90,15 @@ HTML5 engine loading `https://www.youtube.com/tv`. Therefore:
 
 - ✅ The CLI includes `tsltv mods list` and `tsltv mods apply` (since 2.1.3); v2.1.6 fixes device-side `EPERM` via `/rootfs/var/tmp` staging + atomic `rename()` and preserves full app entitlements (verified on device).
 - ✅ Since v2.1.6, the web store on `:8787` also hosts a local Tampermonkey-style userscript bundle (`/api/userscripts.js`) for YouTube TV (Cobalt) hot-reloading without repackaging IPAs.
+
+### Known userscript layout quirk & fix (YouTube TVL + TizenTube)
+
+When TizenTube's default **Video Player UI Patching** (`enablePatchingVideoPlayer`) is enabled on YouTube TV (Cobalt 4.54.01), opening a video can briefly show **mismatched button labels/icons and fluctuating button counts below the progress bar** for 1–3 seconds until `/youtubei/v1/next` finishes loading.
+
+- **Root cause**: TizenTube's `TransportControls` wrapper (`_r()`) has three bugs during the pre-`/next` window:
+  1. When `TRANSPORT_CONTROLS_BUTTON_TYPE_PLAYBACK_SETTINGS` is not yet present (`idx === -1`), it calls `splice(-1, 0, PIP)` in-place, inserting the Mini Player button at the wrong index and mutating YouTube's array;
+  2. It unconditionally pushes the Speed button into empty `engagementActions` arrays and overrides `Previous`/`Next` before `/next` resolves, causing button counts and indices to shift before/after filtering SuperThanks/Shopping/AI Ask and misaligning Incremental DOM slots/labels;
+  3. It re-runs uncached full JS AST parsing on every `TransportControls` instantiation, slowing stabilization.
+- **Workaround & root-cause hotfix**:
+  - **Quick workaround**: Disable *Video Player UI Patching* in TizenTube Settings → Video Player (ad blocking and SponsorBlock remain unaffected);
+  - **Hotfix**: Patch `_r()` in the `:8787`-hosted script to clone arrays via `.slice()`, gate PIP / Prev / Next injection on `PLAYBACK_SETTINGS` presence (`idx >= 0`) and Speed injection on non-empty `engagementActions`, and cache the AST-resolved slot names, then upload via `/api/userscripts/save` and relaunch YouTube TVL.

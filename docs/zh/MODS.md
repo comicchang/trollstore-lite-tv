@@ -85,3 +85,15 @@ tsltv install Foo-modded.ipa
 
 - ✅ CLI 已包含 `tsltv mods list` / `tsltv mods apply`（2.1.3 起），2.1.6 通过 `/rootfs/var/tmp` 桥接 + 原子替换彻底修复了设备端 `EPERM` 问题并补齐主程序完整 entitlements（真机实测通过）。
 - ✅ 网页商店 `:8787` 在 2.1.6 起内置「油猴脚本管理」（`/api/userscripts.js`），可本地托管 TizenTube 与自定义 `.js` 供 YouTube TV（Cobalt）免重打包热加载。
+
+### 已知油猴布局问题与排查方案（YouTube TVL + TizenTube）
+
+在 YouTube TV（Cobalt 4.54.01）开启 TizenTube 默认的「视频播放器 UI 修补（`enablePatchingVideoPlayer`）」时，点开视频后、`/youtubei/v1/next` 返回前的 1–3 秒窗口内，进度条下方可能短暂出现**按钮数量跳变、图标与下方文字错位不匹配**，几秒后才稳定。
+
+- **根因**：TizenTube 的 `TransportControls` 拦截函数（`_r()`）在 `/next` 尚未就绪时存在三处缺陷：
+  1. 右侧按钮查找 `TRANSPORT_CONTROLS_BUTTON_TYPE_PLAYBACK_SETTINGS` 未命中（`idx === -1`）时直接执行原地 `splice(-1, 0, PIP)`，把迷你播放器插进错误下标并原地污染数组；
+  2. 互动按钮列在 `engagementActions` 为空时无条件原地 `push` 播放速度按钮，且未守卫 `Previous`/`Next` 按钮的就绪态，导致 `/next` 返回并过滤 SuperThanks/Shopping/AI Ask 前后按钮数量反复增减，触发 Incremental DOM 节点/标签错位复用；
+  3. 每次实例化 `TransportControls` 都重跑无缓存的完整 JS AST 解析，拖慢控件栏稳定。
+- **规避与根治**：
+  - **临时规避**：在 TizenTube 设置 → 视频播放器中关闭「视频播放器 UI 修补」（不影响去广告与 SponsorBlock）；
+  - **热修根治**：对 `:8787` 托管脚本中的 `_r()` 改用浅拷贝 `.slice()`、仅在 `PLAYBACK_SETTINGS` 已就绪（`idx >= 0`）与 `engagementActions.length > 0` 时注入按钮，并缓存 AST 解析出的属性槽位，经 `/api/userscripts/save` 热更新后重启 YouTube TVL 生效。
