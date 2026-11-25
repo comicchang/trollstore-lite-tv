@@ -84,7 +84,39 @@
 
 ---
 
-## 5. 合规与开源许可证注意事项
+## 5. Gate 1 预演实测结果（2026-11-25，纯只读零风险探针）
+
+我们在当前 Mac（Apple Silicon `arm64`，macOS `27.2.1`）与真机 Apple TV 4K（`AppleTV14,1`）上完成了无修改、零风险的环境与运行时 API 预演，得到以下确定事实：
+
+### 5.1 固件与宿主机检查
+
+- **真机精确版本**：`AppleTV14,1` · **tvOS 17.0（Build `21J354`）** · `xnu-10002.3.3~1/RELEASE_ARM64_T8110`（2023-08-15），确认是 **17.0 初始正式版**（在 17.0.1 修补 CVE-2023-41991 之前）。
+- **Mac 宿主机现状**：`arm64`，剩余磁盘 `60 GiB`，但 **`SIP = enabled`**；尚未安装 `theos`、`pkg-config`、`libarchive`、`openssl`、`ldid`。
+  - 如要使用 `vphone-cli` 在本机起虚拟机，需在 macOS 恢复模式降低 SIP 并预留 ~35–40 GB 磁盘空间。
+
+### 5.2 真机只读运行时探针实测（全部通过，无需 Theos 即可动态绑定）
+
+使用本机标准 Xcode `AppleTVOS.sdk` 编译只读探针（`dlopen` + `dlsym`）在 Apple TV 4K（`21J354`）上实测结果：
+
+| 检查项 | 实测结果 | 意义 |
+|---|---|---|
+| `posix_spawn` / `posix_spawnattr_init` / `posix_spawnattr_destroy` | ✅ `OK`（`0x1849b9bb8` 等） | 运行时完整存在，SDK 标 unavailable 仅是头文件限制 |
+| `posix_spawnattr_set_persona_np` / `_uid_np` / `_gid_np` | ✅ `OK`（`0x1849b9410` / `0x1849b94dc` / `0x1849b950c`） | App 侧可直接提权拉起 root `RootHelper`（G3 可行） |
+| `MobileContainerManager`（`MCMAppContainer` / `MCMAppDataContainer`） | ✅ `dlopen=OK`，两个类均 `OK` | 原生容器部署 API 在 tvOS 17.0 真实可用（G4 可行） |
+| `CoreServices` `LSApplicationWorkspace`（`registerApplicationDictionary:withObserverNotification:` 等 5 个 selector） | ✅ 全部 `OK` | 可脱离 Procursus `uicache` 直接完成 System 注册 |
+| `FrontBoardServices` / `RunningBoardServices` / `BackBoardServices` / `SpringBoardServices` / `MobileInstallation` | ✅ 全部 `dlopen=OK` | 全部私有框架齐备 |
+
+### 5.3 关键新发现：tvOS 17.0 缺少 iOS 风格的「可卸载系统 App」
+
+实测扫描 `/var/containers/Bundle/Application/*/*.app` 与 `/rootfs/Applications/*.app` 发现：
+- tvOS 17.0 所有自带系统应用（`Podcasts`、`AppleTV`、`Fitness`、`FaceTime`、`TVMovies`、`TVMusic`、`TVHomeSharing` 等）**全部位于只读密封卷 `/rootfs/Applications/`**，没有任何一个像 iOS `Tips` 那样位于可写 `/private/var/containers/Bundle/Application/` 的可卸载 `System` App（可写容器内唯一的 Apple 应用只有从商店装的 `TestFlight.app`，属于 `User` 类型）。
+- **结论（直接影响 G5 架构）**：
+  - 在正常重启（未触发系统全量图标缓存重建）场景下，CoreTrust 签名的 `System` App 仍可免越狱直接启动；
+  - 但一旦触发全量图标缓存重建，tvOS 17.0 上**没有安全的 iOS `Tips` 式免越狱 Persistence Helper 寄生位**，此时需要重新跑一次 Relaxin 越狱（或通过 Relaxin 恢复注册）。这大幅降低了动系统 App 的诱因与变砖风险。
+
+---
+
+## 6. 合规与开源许可证注意事项
 
 1. **许可证兼容**：
    - `opa334/TrollStore` 与 `straight-tamago/TrollStore-tvOS` 主体为 MIT，但部分文件（如 `RootHelper/uicache.m`）为 CoolStar 的 **BSD-4-Clause**，且依赖 `OpenSSL`（Apache-2.0）、`libarchive`（BSD-2-Clause）、`ChOma`（MIT）。

@@ -81,7 +81,33 @@ Because `AppleTV14,1` tvOS 17.0 is irreplaceable firmware with no USB port, proc
 
 ---
 
-## 5. Licensing & Compliance Boundaries
+## 5. Gate 1 Rehearsal Results (2026-11-25, Read-Only Zero-Risk Probe)
+
+A read-only host and on-device runtime rehearsal was completed on Apple Silicon macOS (`27.2.1`) and physical Apple TV 4K (`AppleTV14,1`) with zero system modifications:
+
+### 5.1 Firmware & Host Readiness
+
+- **Exact Apple TV firmware**: `AppleTV14,1` · **tvOS 17.0 (Build `21J354`)** · `xnu-10002.3.3~1/RELEASE_ARM64_T8110` (Aug 15, 2023) — confirmed initial 17.0 GM build prior to the 17.0.1 CVE-2023-41991 fix.
+- **Mac host status**: `arm64`, `60 GiB` free disk, **`SIP = enabled`**; `theos`, `pkg-config`, `libarchive`, `openssl`, `ldid` are not yet installed. Running `vphone-cli` locally requires lowering SIP in Recovery Mode and reserving ~35–40 GB for VM storage.
+
+### 5.2 On-Device Runtime API Probe (All Passed via Stock Xcode SDK `dlsym`/`dlopen`)
+
+| Check | Result | Implication |
+|---|---|---|
+| `posix_spawn` / `posix_spawnattr_init` / `posix_spawnattr_destroy` | ✅ `OK` (`0x1849b9bb8`, etc.) | Present at runtime; SDK unavailable mark is header-only |
+| `posix_spawnattr_set_persona_np` / `_uid_np` / `_gid_np` | ✅ `OK` (`0x1849b9410` / `0x1849b94dc` / `0x1849b950c`) | Direct root spawning of `RootHelper` is viable (G3) |
+| `MobileContainerManager` (`MCMAppContainer` / `MCMAppDataContainer`) | ✅ `dlopen=OK`, both classes `OK` | Native container APIs exist on tvOS 17.0 (G4) |
+| `CoreServices` `LSApplicationWorkspace` (all 5 selectors incl. `registerApplicationDictionary:withObserverNotification:`) | ✅ All `OK` | Can register `System` apps without Procursus `uicache` |
+| `FrontBoardServices` / `RunningBoardServices` / `BackBoardServices` / `SpringBoardServices` / `MobileInstallation` | ✅ All `dlopen=OK` | All required private frameworks present |
+
+### 5.3 Critical Discovery: No Removable `System` App in Writable Containers on tvOS 17.0
+
+Enumerating `/var/containers/Bundle/Application/*/*.app` vs `/rootfs/Applications/*.app` confirmed that **all built-in Apple apps on tvOS 17.0 (`21J354`) live on the sealed read-only `/rootfs/Applications/` volume** (the only Apple app in writable `/var/containers/Bundle/Application/` is App Store `TestFlight.app`, which is `Type: User`).
+- **Implication for G5**: Unlike iOS (`Tips`), tvOS 17.0 has **no removable `System` app** to host a jailed Persistence Helper. Normal reboots preserve CoreTrust `System` registrations, while an icon-cache rebuild falls back to running Relaxin once to re-register — avoiding risky system-app modifications altogether.
+
+---
+
+## 6. Licensing & Compliance Boundaries
 
 - Upstream `opa334/TrollStore` and `straight-tamago/TrollStore-tvOS` are mostly MIT, with BSD-4-Clause components (`RootHelper/uicache.m`) and dependencies including `OpenSSL` (Apache-2.0), `libarchive` (BSD-2-Clause), and `ChOma` (MIT). Preserve all copyright & license notices if reusing code, or keep a clean-room boundary.
 - External tools referenced only in docs (never bundled): [`owngoal-dev/Relaxin`](https://github.com/owngoal-dev/Relaxin) (MIT), [`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli) (MIT), [`majd/ipatool`](https://github.com/majd/ipatool) (MIT), [`EthanArbuckle/fairplay-decrypt`](https://github.com/EthanArbuckle/fairplay-decrypt) (GPL-3.0).
