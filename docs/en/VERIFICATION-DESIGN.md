@@ -62,7 +62,7 @@ Before entering the three-stage verification, fixed isolation rails and rollback
 
 ## 4. Three-Stage Minimal Verification System
 
-The three stages proceed in order of **risk from zero upward and cost from small upward**; failure at any stage triggers a stop-loss or rollback, and skipping stages is forbidden.
+The three stages proceed in order of **risk from zero upward and cost from small upward**; on failure, clean up and diagnose the root cause before iterating (no artificial retry cap; the only hard boundaries are device safety and no unapproved reboots).
 
 ```mermaid
 flowchart LR
@@ -194,3 +194,67 @@ Stage 1 is implemented as a repeatable host-side gate [`tests/stage1/run.sh`](..
 ```
 
 `tests/run.sh` runs this gate automatically on macOS hosts with the SDK; Linux CI skips it.
+
+---
+
+## 9. Stage 2 Isolated Runtime Results (2026-11-25)
+
+> **Verdict: `CONDITIONAL / suspended`.** 2B passed, 2C failed; Stage 3 was not entered, and `TrollStore Lite TV v2.1.6` remains the production mainline. No reboot, no `/rootfs` writes, no system-app replacement, no modification of production apps or `installed.tsv`, and no CoreTrust / CVE-2023-41991 use occurred.
+
+### 9.1 Environment Baseline
+
+| Field | Value |
+|---|---|
+| Device | `AppleTV14,1` |
+| OS | `tvOS 17.0 (21J354)` |
+| uptime before the experiment | 124 days (continuous during the experiment; no reboot) |
+| trustcache before the experiment | 587 / 740 |
+| Production baseline | `tsltv verify` 7/7 `PASS`; `installed.tsv` sha256 `51f98000…` |
+| Test subject | `com.tsltv.verify.probe`; the main binary inside the container matched the source hash |
+
+### 9.2 Results by Sub-item
+
+| Sub-item | Verdict | Key evidence |
+|---|---|---|
+| **2A. Independent run check** | `CONFOUNDED` | A plain ad-hoc binary with only `application-identifier` was `SIGKILL`ed (`rc=137`) without an explicit cache add; however, the Relaxin dynamic-owner trustcache auto-added entries during execution (`587 → 592`); a privileged ad-hoc binary (`platform-application` / `get-task-allow`) ran with `rc=0` without an explicit cache add |
+| **2B. Native container and registration** | `PASS` | Native `MCMAppContainer` + `MCMAppDataContainer` + `LSApplicationWorkspace(registerApplicationDictionary:)` ran end to end; registered as `Type: System / Removable: true`; path `/private/var/containers/Bundle/Application/<UUID>/VerifyProbe.app` |
+| **2C. UI launch and screen confirmation** | `FAIL` | With only `application-identifier` and with the three-piece entitlement set, both `uiopen` runs returned `rc=0`; no process at 1s/5s or 1s/7s; no `.ips`; direct `exec` of the container binary stayed alive; `shot` 3840×2160 worked. The gap is in the FrontBoard / RunningBoard launch contract; the root cause is not closed |
+| **2D. Production baseline regression** | `PASS` | `unregister=1 deleted=1`; `query installed=0`; both containers and `/var/tmp/tsltv-verify-*` removed; `tsltv verify` 7/7 `PASS`; `installed.tsv` sha256 unchanged; no reboot; trustcache 599/740 (inert test cdhash residue) |
+
+### 9.3 2A Details: Why It Is `CONFOUNDED`
+
+1. A plain ad-hoc binary carrying only `application-identifier`, without an explicit `jbctl trustcache add`, was terminated by the kernel with exit code `137` (`SIGKILL`).
+2. In the same environment, Relaxin's dynamic-owner trustcache auto-appended entries during execution, measured at **587 → 592**; that test cdhash was subsequently visible in the cache.
+3. A privileged ad-hoc binary with `platform-application` and `get-task-allow` ran with `rc=0` even without an explicit cache add.
+
+Therefore, in the jailbroken state there is **no "clean, no-trustcache" baseline**: execution itself changes the cache state, and the privileged path bypasses the cache check. 2A can only be recorded as `CONFOUNDED`; it can neither prove nor disprove the trust mechanism.
+
+### 9.4 2B Details: Container and Registration Work
+
+- Helper: `tests/stage2/tsverify.m`, run as root; ad-hoc signed with the upstream RootHelper storage / container-manager / uninstall entitlements; the helper itself was not added to the trustcache.
+- Deployment: `MCMAppContainer` creates the app container and `MCMAppDataContainer` creates the data container; the test `.app` is copied into the app container with the executable bit set.
+- Registration: `LSApplicationWorkspace`'s `registerApplicationDictionary:` returned success; both `uicache -i` and `LSApplicationProxy` queries returned `Type: System`, `Removable: true`, with a path matching the container.
+- The main binary's sha256 inside the container matched the source file; `/Applications`, `installed.tsv`, and all production apps were untouched.
+
+### 9.5 2C Details: Silent Launch Failure
+
+- **First run (only `application-identifier`)**: `uiopen --bundleid com.tsltv.verify.probe` returned `0`, but there was no process at 1s / 5s and no new `.ips`; direct `exec` of the container binary stayed alive.
+- **Second run (three-piece set)**: after re-signing, cdhash `098ed4699fa9fb0133b9c7dae1dbb6b20509d9e2`, one trustcache hit, entries 599/740; after redeployment `uiopen` still returned `0`, with no process at 1s / 7s and no new `.ips`.
+- **Screenshot pipeline**: `shot` returned `0`, `TVOut 3840x2160`, `nonBlackSamples=3956`; however, that PNG was deleted with the test artifacts during 2D cleanup, so **no image file was retained**, only stdout evidence.
+- **Boundary**: the binary, container, and registration are all normal; the gap is in the FrontBoard / RunningBoard launch contract. This test pass paused after two controlled runs and cleaned back to baseline; the offline diff list is deferred to a later supplement.
+
+### 9.6 2D Details: Regression and Residue
+
+- `killall VerifyProbe`: no process.
+- `tsverify cleanup`: `unregister=1 deleted=1`; `tsverify query`: `installed=0 type=(nil) path=(nil)`.
+- The app container and data container were deleted; `/var/tmp/tsltv-verify-*` was deleted; `uicache -l` has no `tsltv.verify` registration.
+- `tsltv verify`: 7/7 `PASS`; `installed.tsv` sha256 `51f98000c231828894ba313189c6344606f5f781d264a6f3c0ae5e72e2a3677e`, identical to the pre-experiment value.
+- uptime 124 days 10:53; no reboot.
+- trustcache 599/740: the test cdhash is inert residue whose files were deleted and which can no longer execute; it clears naturally on the next reboot.
+
+### 9.7 Verdict and Evidence Boundaries
+
+- 2A `CONFOUNDED`, 2B `PASS`, 2C `FAIL`, 2D `PASS` → **`CONDITIONAL / suspended`**; Stage 3 is not entered.
+- 2B proves that "native container + LS System registration" is feasible in the current environment; 2C proves that "registration success ≠ FrontBoard will launch", so the full native-backend chain is not closed.
+- Known evidence gaps: the screenshot PNG was not retained; the POSIX ownership of the container/`.app` was not measured; `uicache -p`'s internal registration fields are not in this repository. Any follow-up test (including a single read-only log capture) must be re-declared and authorized.
+- Production strategy is unchanged: keep using the `TrollStore Lite TV v2.1.6` jailbreak trustcache backend; cold-reboot Stage 3 is out of scope for this experiment.

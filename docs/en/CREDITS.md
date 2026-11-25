@@ -37,7 +37,7 @@ This project **does not copy** source from the projects above; the interface com
 
 The following capabilities **do not exist** in this project and are not planned:
 
-- CoreTrust exploitation (CVE-2023-41991) — ineffective on tvOS 17.0, see [Design decisions](DESIGN-DECISIONS.md)
+- CoreTrust exploitation (CVE-2023-41991) — this project uses the jailbroken kernel trust cache instead (see [Gap Analysis](FULL-TROLLSTORE-GAP.md))
 - FairPlay decryption (encrypted App Store bundles are not handled)
 - Any mechanism that bypasses App Store payment
 

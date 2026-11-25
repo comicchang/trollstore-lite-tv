@@ -11,6 +11,7 @@ examples/hello-tvos/.build/
 dist/*.deb
 dist/*.ipa
 dist/*.tar.gz
+dist/stage2/
 
 # 系统与本地索引垃圾
 .DS_Store

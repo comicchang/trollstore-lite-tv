@@ -119,7 +119,7 @@ fi
 # ---------------------------------------------------------------- 5. 预检判定
 group "安装前判定（纯函数）"
 verdict_case() { # <探测串> <期望rc> <描述>
-  out=$(TrollStoreLiteTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict \"\$1\"" sh "$1" 2>&1)
+  out=$(TSLTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict \"\$1\"" sh "$1" 2>&1)
   rc=$?
   if [ "$rc" = "$2" ]; then ok "$3"; else bad "$3：期望 rc=$2 实际 rc=$rc"; fi
 }
@@ -128,9 +128,9 @@ verdict_case "platform=3 minos=17.0 cryptid=1" 1 "加密包 → 拒绝"
 verdict_case "platform=2 minos=15.0 cryptid=0" 0 "iOS 包 → 放行但警告"
 verdict_case "platform=3 minos=18.0 cryptid=0" 0 "高 minOS → 放行但警告"
 
-warn=$(TrollStoreLiteTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict 'platform=2 minos=15.0 cryptid=0'" 2>&1)
+warn=$(TSLTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict 'platform=2 minos=15.0 cryptid=0'" 2>&1)
 case "$warn" in *"iOS 平台"*) ok "iOS 警告文案出现" ;; *) bad "缺少 iOS 平台警告" ;; esac
-warn=$(TrollStoreLiteTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict 'platform=3 minos=18.0 cryptid=0'" 2>&1)
+warn=$(TSLTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict 'platform=3 minos=18.0 cryptid=0'" 2>&1)
 case "$warn" in *"高于本机"*) ok "minOS 警告文案出现" ;; *) bad "缺少 minOS 警告" ;; esac
 
 # ---------------------------------------------------------------- 6. Mach-O 解析
@@ -141,7 +141,7 @@ if [ -d "$SDK" ]; then
 int main(void){ return 0; }
 EOF
   if clang -target arm64-apple-tvos17.0 -isysroot "$SDK" "$TMP/t.m" -o "$TMP/probe" 2>/dev/null; then
-    info=$(TrollStoreLiteTV_LIB_ONLY=1 sh -c ". \"$CLI\"; macho_info \"\$1\"" sh "$TMP/probe" 2>&1)
+    info=$(TSLTV_LIB_ONLY=1 sh -c ". \"$CLI\"; macho_info \"\$1\"" sh "$TMP/probe" 2>&1)
     case "$info" in
       *platform=3*minos=17.0*cryptid=0*) ok "解析结果: $info" ;;
       *) bad "解析异常: $info" ;;

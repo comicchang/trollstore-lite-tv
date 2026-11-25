@@ -25,8 +25,7 @@ tvOS 默认只允许运行 App Store 签名的应用。想在 Apple TV 上跑自
 （Kodi、各种开源播放器、自己编译的 app），通常需要：
 
 - 一个 Apple 开发者证书（免费证书 7 天过期、需要重签、设备数量受限），或
-- TrollStore 那套 **CoreTrust 漏洞**（CVE-2023-41991）——**这条路在 tvOS 17.0 上不通**
-  （伪造证书能过，但内核的 `CS_INVALID_ALLOWED` 永不置位，见 [设计取舍](docs/zh/DESIGN-DECISIONS.md)）
+- 原版 TrollStore 所用的 **CoreTrust 漏洞**路线（CVE-2023-41991，仅限 tvOS ≤ 17.0 且本项目不实现漏洞利用；早期复核与 Gap 分析见 [Gap 分析](docs/zh/FULL-TROLLSTORE-GAP.md)）
 
 TrollStore Lite TV 走的是第三条路，也是**越狱设备上唯一可行的那条**：
 

@@ -36,9 +36,9 @@ assembles arguments and calls `spawnRoot(rootHelperPath(), args)`. All the real 
 |---|---|
 | `posix_spawn` / `posix_spawn_file_actions_*` | The SDK marks them `unavailable`; compilation fails outright (`spawnRoot()` and `killall()` in RootHelper are both dead) |
 | `posix_spawnattr_set_persona_*` | Same |
-| `MCMAppContainer` / `MCMAppDataContainer` | The classes do not exist (statically compared against the tvOS SDK: missing) |
+| `MCMAppContainer` / `MCMAppDataContainer` | Omitted from stock Xcode `AppleTVOS.sdk` public headers; confirmed present at runtime on tvOS 17.0 (see [FULL-TROLLSTORE-GAP.md](FULL-TROLLSTORE-GAP.md) §5.2) |
 | `PSListController` / `PSSpecifier` | Do not exist; the entire settings UI is unusable |
-| **CoreTrust (CVE-2023-41991)** | The forgery succeeds but `CS_INVALID_ALLOWED` is never set → even if installed, it will not start |
+| **CoreTrust (CVE-2023-41991)** | Not used by `TrollStore Lite TV` (the earlier tvOS 17.0 dead-end assumption was revised to unverified in [FULL-TROLLSTORE-GAP.md](FULL-TROLLSTORE-GAP.md) §2) |
 
 So "fork upstream and add a tvOS target" is a dead end — and not for lack of trying.
 

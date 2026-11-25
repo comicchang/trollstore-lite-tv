@@ -34,7 +34,7 @@
 
 以下能力在本项目中**不存在**，也不打算实现：
 
-- CoreTrust 漏洞利用（CVE-2023-41991）—— 在 tvOS 17.0 上无效，见 [设计取舍](DESIGN-DECISIONS.md)
+- CoreTrust 漏洞利用（CVE-2023-41991）—— 本项目走越狱信任缓存路线，不实现漏洞利用（详见 [Gap 分析](FULL-TROLLSTORE-GAP.md)）
 - FairPlay 解密（不处理加密的 App Store 包）
 - 任何绕过 App Store 付费的机制
 

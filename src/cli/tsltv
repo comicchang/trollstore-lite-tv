@@ -870,10 +870,6 @@ cmd_install_url() {
 
 # ---------- 入口 ----------
 
-if [ "${TrollStoreLiteTV_LIB_ONLY:-0}" = "1" ]; then
-  return 0 2>/dev/null || exit 0
-fi
-
 # 供单元测试使用：TSLTV_LIB_ONLY=1 时只定义函数，不执行任何命令
 if [ "${TSLTV_LIB_ONLY:-0}" = "1" ]; then
   return 0 2>/dev/null || exit 0

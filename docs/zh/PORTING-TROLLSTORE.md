@@ -35,9 +35,9 @@ TrollStore.app  ──spawnRoot()──▶  RootHelper （root 二进制）
 |---|---|
 | `posix_spawn` / `posix_spawn_file_actions_*` | SDK 标 `unavailable`，编译直接报错（RootHelper 的 `spawnRoot()`、`killall()` 全废） |
 | `posix_spawnattr_set_persona_*` | 同上 |
-| `MCMAppContainer` / `MCMAppDataContainer` | 类不存在（静态比对 tvOS SDK：缺失） |
+| `MCMAppContainer` / `MCMAppDataContainer` | 公开 Xcode `AppleTVOS.sdk` 头文件未暴露；实测 tvOS 17.0 运行时存在（见 [FULL-TROLLSTORE-GAP.md](FULL-TROLLSTORE-GAP.md) §5.2） |
 | `PSListController` / `PSSpecifier` | 不存在，设置界面整块用不了 |
-| **CoreTrust（CVE-2023-41991）** | 伪造成功但 `CS_INVALID_ALLOWED` 永不置位 → 装了也起不来 |
+| **CoreTrust（CVE-2023-41991）** | `TrollStore Lite TV` 不依赖此路径（早期关于 tvOS 17.0 失效的初步推断已在 [FULL-TROLLSTORE-GAP.md](FULL-TROLLSTORE-GAP.md) §2 中更正为待复核） |
 
 所以「把上游 fork 过来加个 tvOS target」这条路是死的，不是没试。
 

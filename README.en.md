@@ -27,9 +27,8 @@ tvOS apps on an Apple TV (Kodi, open-source players, an app you compiled yoursel
 
 - an Apple developer certificate (free certificates expire after 7 days, need re-signing, and allow
   only a limited number of devices), or
-- the **CoreTrust vulnerability** (CVE-2023-41991) that TrollStore relies on — **a dead end on
-  tvOS 17.0** (the forged certificate passes, but the kernel's `CS_INVALID_ALLOWED` is never set;
-  see [Design decisions](docs/en/DESIGN-DECISIONS.md))
+- the **CoreTrust vulnerability** path (CVE-2023-41991, tvOS ≤ 17.0 only; not implemented by this
+  project — see [Gap Analysis](docs/en/FULL-TROLLSTORE-GAP.md))
 
 TrollStore Lite TV takes the third path, and the only one that works on a jailbroken device:
 

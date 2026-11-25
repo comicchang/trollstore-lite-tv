@@ -62,7 +62,7 @@ flowchart TD
 
 ## 4. 三级最小验证体系设计
 
-三级验证按**风险从零到低、成本从小到大**依次递进；任一级不通过即触发止损或回退，禁止跨级执行。
+三级验证按**风险从零到低、成本从小到大**依次递进；任一级不通过时先回退清理并排查根因，再决定下一步调整（不设重试次数硬上限，唯一硬边界为保护设备不崩、不未经确认重启）。
 
 ```mermaid
 flowchart LR
@@ -194,3 +194,67 @@ Stage 1 已实现为可重复执行的宿主机闸门 [`tests/stage1/run.sh`](..
 ```
 
 `tests/run.sh` 在具备 SDK 的 macOS 上自动运行该闸门，Linux CI 跳过。
+
+---
+
+## 9. Stage 2 隔离实测结果（2026-11-25）
+
+> **结论：`CONDITIONAL / 暂止`。** 2B 通过，2C 未通过；不进入 Stage 3，继续以 `TrollStore Lite TV v2.1.6` 为生产主线。全程未重启、未写 `/rootfs`、未替换系统 App、未修改生产应用或 `installed.tsv`，未使用 CoreTrust / CVE-2023-41991。
+
+### 9.1 环境基线
+
+| 字段 | 值 |
+|---|---|
+| 设备 | `AppleTV14,1` |
+| 系统 | `tvOS 17.0 (21J354)` |
+| 实验前 uptime | 124 天（实验期间连续，未重启） |
+| 实验前 trustcache | 587 / 740 |
+| 生产基线 | `tsltv verify` 7/7 `PASS`；`installed.tsv` sha256 `51f98000…` |
+| 测试对象 | `com.tsltv.verify.probe`；容器内主二进制与源文件哈希一致 |
+
+### 9.2 分项结果
+
+| 子项 | 结论 | 关键证据 |
+|---|---|---|
+| **2A. 独立运行校验** | `CONFOUNDED` | 仅 `application-identifier` 的 ad-hoc 未显式入缓存时被 `SIGKILL`（`rc=137`）；但 Relaxin dynamic-owner trustcache 在执行期自动写入（`587 → 592`）；特权 ad-hoc（`platform-application` / `get-task-allow`）未显式入缓存直接 `rc=0` |
+| **2B. 原生容器与注册** | `PASS` | 原生 `MCMAppContainer` + `MCMAppDataContainer` + `LSApplicationWorkspace(registerApplicationDictionary:)` 完整跑通；注册为 `Type: System / Removable: true`；路径位于 `/private/var/containers/Bundle/Application/<UUID>/VerifyProbe.app` |
+| **2C. 界面拉起与画面确认** | `FAIL` | 仅 `application-identifier` 与三件套 entitlements 两次 `uiopen` 均 `rc=0`；1s/5s 或 1s/7s 无进程；无 `.ips`；直接 `exec` 容器内二进制可存活；`shot` 3840×2160 正常。表现为 FrontBoard / RunningBoard 拉起契约存在缺口，根因未闭环 |
+| **2D. 生产基线回归** | `PASS` | `unregister=1 deleted=1`；`query installed=0`；两个容器与 `/var/tmp/tsltv-verify-*` 全清；`tsltv verify` 7/7 `PASS`；`installed.tsv` sha256 一致；未重启；trustcache 599/740（测试 cdhash 惰性残留） |
+
+### 9.3 2A 细节：为什么是 `CONFOUNDED`
+
+1. 一个仅带 `application-identifier` 的普通 ad-hoc 二进制，在没有显式执行 `jbctl trustcache add` 时被内核终止，退出码 `137`（`SIGKILL`）。
+2. 但同一环境下，Relaxin 的 dynamic-owner trustcache 会在执行期自动追加条目，实测从 **587 条增至 592 条**；该测试 cdhash 随后可见于缓存。
+3. 带 `platform-application` 与 `get-task-allow` 的特权 ad-hoc 二进制，未显式入缓存也能以 `rc=0` 运行。
+
+因此，在已越狱态下**不存在“纯净无 trustcache”的判据**：执行本身会改变缓存状态，特权路径又会绕过缓存检查。2A 只能记为 `CONFOUNDED`，不能据此证明或证伪信任机制。
+
+### 9.4 2B 细节：容器与注册可行
+
+- 助手：`tests/stage2/tsverify.m`，以 root 运行；按上游 RootHelper 的 storage / container-manager / uninstall entitlements 完成 ad-hoc 签名；助手自身未写入 trustcache。
+- 部署：`MCMAppContainer` 创建应用容器，`MCMAppDataContainer` 创建数据容器；把测试 `.app` 复制进应用容器并设置可执行位。
+- 注册：`LSApplicationWorkspace` 的 `registerApplicationDictionary:` 返回成功；`uicache -i` 与 `LSApplicationProxy` 查询均返回 `Type: System`、`Removable: true`，路径与容器一致。
+- 容器内主二进制 sha256 与源文件一致；未触碰 `/Applications`、`installed.tsv` 或任何生产应用。
+
+### 9.5 2C 细节：拉起静默失败
+
+- **第一轮（仅 `application-identifier`）**：`uiopen --bundleid com.tsltv.verify.probe` 返回 `0`，但 1s / 5s 后均无进程，无新增 `.ips`；直接 `exec` 容器内二进制可存活。
+- **第二轮（三件套）**：重新签名后 cdhash `098ed4699fa9fb0133b9c7dae1dbb6b20509d9e2`，trustcache 命中 1 次，条目 599/740；重新部署后 `uiopen` 仍返回 `0`，1s / 7s 后无进程，无新增 `.ips`。
+- **截屏链路**：`shot` 返回 `0`，`TVOut 3840x2160`，`nonBlackSamples=3956`；但该 PNG 在 2D 清理时按测试产物删除，**未保留图片文件**，只保留 stdout 证据。
+- **结论边界**：二进制、容器与注册均正常；缺口在 FrontBoard / RunningBoard 的拉起契约。本轮试验在完成两次对照后主动暂止并清理回基线，离线差异清单留待后续补充。
+
+### 9.6 2D 细节：回归与残留
+
+- `killall VerifyProbe`：无进程。
+- `tsverify cleanup`：`unregister=1 deleted=1`；`tsverify query`：`installed=0 type=(nil) path=(nil)`。
+- 应用容器与数据容器均已删除；`/var/tmp/tsltv-verify-*` 已删除；`uicache -l` 无 `tsltv.verify` 注册。
+- `tsltv verify`：7/7 `PASS`；`installed.tsv` sha256 `51f98000c231828894ba313189c6344606f5f781d264a6f3c0ae5e72e2a3677e`，与实验前一致。
+- uptime 124 天 10:53，未重启。
+- trustcache 599/740：测试 cdhash 为惰性残留，对应文件已删除，不可再执行；重启后自然清空。
+
+### 9.7 判决与证据边界
+
+- 2A `CONFOUNDED`、2B `PASS`、2C `FAIL`、2D `PASS` → **`CONDITIONAL / 暂止`**，不进入 Stage 3。
+- 2B 证明“原生容器 + LS System 注册”在当前环境可行；2C 证明“注册成功 ≠ FrontBoard 愿意拉起”，完整原生后端链路尚未闭环。
+- 已知证据缺口：截屏 PNG 未保留；容器/`.app` 的 POSIX 属主未采集；`uicache -p` 的内部注册字段不在本仓库。任何补测（包括单次只读日志采集）都必须重新申报并取得授权。
+- 生产策略不变：继续使用 `TrollStore Lite TV v2.1.6` 的越狱信任缓存后端；Stage 3 冷重启不在本实验范围内。
