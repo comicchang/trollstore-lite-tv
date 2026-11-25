@@ -152,6 +152,7 @@ CI 覆盖 shellcheck、单元测试、本地打包与 tag 触发的 Release，�
 | [docs/TESTING.md](docs/zh/TESTING.md) | 测试矩阵、验收脚本、历史证据、未测项 |
 | [docs/DESIGN-DECISIONS.md](docs/zh/DESIGN-DECISIONS.md) | 为什么这样做，以及五条被证伪的路线 |
 | [docs/PORTING-TROLLSTORE.md](docs/zh/PORTING-TROLLSTORE.md) | 如何把本机制移植进 TrollStore |
+| [docs/FULL-TROLLSTORE-GAP.md](docs/zh/FULL-TROLLSTORE-GAP.md) | 现状总结与原版免越狱 TrollStore（CoreTrust 2）Gap 分析与三道验证闸门 |
 | [docs/ROADMAP.md](docs/zh/ROADMAP.md) | 已知缺口与后续计划 |
 | [docs/CREDITS.md](docs/zh/CREDITS.md) | 依赖与致谢（Relaxin / roothide / Procursus / TrollStore） |
 | [CHANGELOG.md](CHANGELOG.md) | 版本记录 |

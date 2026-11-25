@@ -159,6 +159,7 @@ Licensing and the scope of what we borrowed: [NOTICE](NOTICE). Porting details:
 | [docs/en/TESTING.md](docs/en/TESTING.md) | Test matrix, acceptance scripts, historical evidence, untested areas |
 | [docs/en/DESIGN-DECISIONS.md](docs/en/DESIGN-DECISIONS.md) | Why it is built this way, and the five routes we disproved |
 | [docs/en/PORTING-TROLLSTORE.md](docs/en/PORTING-TROLLSTORE.md) | How to port this mechanism into TrollStore |
+| [docs/en/FULL-TROLLSTORE-GAP.md](docs/en/FULL-TROLLSTORE-GAP.md) | Baseline & gap analysis for full persistent (jailed) TrollStore on tvOS 17.0 |
 | [docs/en/ROADMAP.md](docs/en/ROADMAP.md) | Known gaps and what comes next |
 | [docs/en/CREDITS.md](docs/en/CREDITS.md) | Dependencies and credits (Relaxin / roothide / Procursus / TrollStore) |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
