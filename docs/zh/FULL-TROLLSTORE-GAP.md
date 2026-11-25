@@ -61,7 +61,8 @@
 1. **离线内核/KEXT 静态核查**：
    - 获取 `AppleTV14,1` tvOS 17.0 官方 IPSW，提取内核缓存中的 `CoreTrust` / `AMFI` 相关函数，静态确认 CVE-2023-41991 的多签名者校验漏洞在该 build 中确未修补。
 2. **Mac 虚拟机预演（[`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli)）**：
-   - 在 Apple Silicon Mac 上借助 `vphone-cli`（基于 macOS `Virtualization.framework`）验证 `ChOma` + `fastPathSign` 签名流程、`dlsym`/`extern` 调用 `posix_spawn` + `persona` 提权、以及 `MCMAppContainer` + `LSApplicationWorkspace` 注册代码，把编译与逻辑坑全部在虚拟机内排干净。
+   - 在 Apple Silicon Mac 上借助 `vphone-cli`（基于 macOS `Virtualization.framework`）验证 `ChOma` + `fastPathSign` 签名流程、`dlsym`/`extern` 调用 `posix_spawn` + `persona` 提权、以及 `MCMAppContainer` + `LSApplicationWorkspace` 注册代码。
+   - **版本限制（按当前最新版本）**：`vphone-cli` 的 tvOS 预设仅支持约 **tvOS 26.6–27.x**（tvOS 27 左右；tvOS 27+ 需 macOS 27 宿主机），**不支持启动 tvOS 17.x**，因此仅适合用于新固件研究与通用 API 演练，无法直接复现 tvOS 17.0 的内核行为。
 3. **真机最小 PoC（不碰任何系统 App）**：
    - 用 `fastPathSign` 签一个极简 `hello-ct` CLI 与极简 `HelloCT.app`（**绝对不调用 `jbctl trustcache add`**）。
    - 验证在**无 trustcache 条目**时，`HelloCT` 能否在设备上直接执行、以及在 `Type: System` 注册下能否拉起；
@@ -92,7 +93,7 @@
 
 - **真机精确版本**：`AppleTV14,1` · **tvOS 17.0（Build `21J354`）** · `xnu-10002.3.3~1/RELEASE_ARM64_T8110`（2023-08-15），确认是 **17.0 初始正式版**（在 17.0.1 修补 CVE-2023-41991 之前）。
 - **Mac 宿主机现状**：`arm64`，剩余磁盘 `60 GiB`，但 **`SIP = enabled`**；尚未安装 `theos`、`pkg-config`、`libarchive`、`openssl`、`ldid`。
-  - 如要使用 `vphone-cli` 在本机起虚拟机，需在 macOS 恢复模式降低 SIP 并预留 ~35–40 GB 磁盘空间。
+  - 如要使用 [`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli) 在本机起虚拟机，除需在 macOS 恢复模式降低 SIP 并预留 ~35–40 GB 磁盘空间外，**按当前最新版本限制**其 tvOS 预设仅支持约 **tvOS 26.6–27.x**（tvOS 27 左右），无法用于 tvOS 17.0 固件复现。
 
 ### 5.2 真机只读运行时探针实测（全部通过，无需 Theos 即可动态绑定）
 
@@ -119,11 +120,12 @@
 ## 6. 合规与开源许可证注意事项
 
 1. **许可证兼容**：
-   - `opa334/TrollStore` 与 `straight-tamago/TrollStore-tvOS` 主体为 MIT，但部分文件（如 `RootHelper/uicache.m`）为 CoolStar 的 **BSD-4-Clause**，且依赖 `OpenSSL`（Apache-2.0）、`libarchive`（BSD-2-Clause）、`ChOma`（MIT）。
+   - [`opa334/TrollStore`](https://github.com/opa334/TrollStore) 与 [`straight-tamago/TrollStore-tvOS`](https://github.com/straight-tamago/TrollStore-tvOS) 主体为 MIT，但部分文件（如 `RootHelper/uicache.m`）为 CoolStar 的 **BSD-4-Clause**，且依赖 [`OpenSSL`](https://github.com/openssl/openssl)（Apache-2.0）、[`libarchive`](https://github.com/libarchive/libarchive)（BSD-2-Clause）、[`opa334/ChOma`](https://github.com/opa334/ChOma)（MIT）。
    - 若直接复用上游代码，必须在 `LICENSE` / `NOTICE` 中逐项保留原版权与许可证文本；若独立重写，须保证洁净室边界。
 2. **外部引用工具边界**（仅文档引用，均不打包）：
    - [`owngoal-dev/Relaxin`](https://github.com/owngoal-dev/Relaxin)（MIT）
-   - [`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli)（MIT）
+   - [`roothide`](https://github.com/roothide) / [`Procursus`](https://github.com/ProcursusTeam/Procursus)（[`ldid`](https://github.com/ProcursusTeam/ldid)、[`uikittools-ng`](https://github.com/ProcursusTeam/uikittools-ng)）
+   - [`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli)（MIT；按当前最新版本仅支持约 tvOS 26.6–27.x / tvOS 27 左右，不支持 tvOS 17.x）
    - [`majd/ipatool`](https://github.com/majd/ipatool)（MIT）
    - [`EthanArbuckle/fairplay-decrypt`](https://github.com/EthanArbuckle/fairplay-decrypt)（GPL-3.0）
 3. **禁止入库项**：任何 Apple 官方 IPSW / 内核镜像 / 证书私钥（如 `.p12`）/ 第三方 `.ipa` / FairPlay 凭据一律不得提交进公开仓库。

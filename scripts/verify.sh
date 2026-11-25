@@ -11,8 +11,9 @@ set -u
 
 IP="${1:-}"
 [ -n "$IP" ] || { echo "用法: $0 <设备IP>"; exit 2; }
-JB=/private/var/containers/Bundle/Application/.jbroot-<UUID>
 SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null mobile@$IP"
+JB=$($SSH 'ls -d /private/var/containers/Bundle/Application/.jbroot-* 2>/dev/null | head -1' 2>/dev/null)
+JB="${JB:-/private/var/containers/Bundle/Application/.jbroot-missing}"
 
 fail=0
 row() { # row <名称> <PASS|FAIL> <证据>
@@ -34,7 +35,6 @@ jb=$($SSH "test -d $JB && echo yes || echo no" 2>/dev/null)
 row "越狱 jbroot 存在" "$([ "$jb" = yes ] && echo PASS || echo FAIL)" "$JB"
 
 # 2. 信任缓存可用
-tc=$($SSH "echo \$SUDO | sudo -S -p '' $JB/usr/bin/jbctl trustcache info 2>/dev/null | grep -c 'Relaxin trust cache'" 2>/dev/null)
 tc=$($SSH "$JB/usr/bin/jbctl trustcache info 2>/dev/null | grep -c 'Relaxin trust cache'" 2>/dev/null)
 row "Relaxin 信任缓存可查" "$([ "${tc:-0}" -ge 1 ] && echo PASS || echo FAIL)" "命中 ${tc:-0} 个缓存"
 

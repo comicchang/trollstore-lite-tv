@@ -38,23 +38,34 @@ The following external projects are NOT included in this repository, but are
 either runtime prerequisites, referenced research tools, or design inspirations:
 
 - TrollStore (https://github.com/opa334/TrollStore)
-  Copyright (c) 2022-2026 Lars Fröder — MIT License.
+  Copyright (c) 2022-2026 Lars Fröder — MIT License (RootHelper/uicache.m is
+  BSD-4-Clause and is NOT included).
   Design & CLI interface inspiration only (RootHelper subcommand conventions in
   `src/fork/tsh`, `iTunesMetadata.plist` metadata lookup, System vs User
-  registration distinction). No TrollStore source code is copied; CoolStar's
-  BSD-4-Clause `uicache.m` is NOT included. See docs/zh/PORTING-TROLLSTORE.md
-  and docs/en/PORTING-TROLLSTORE.md.
+  registration distinction). No TrollStore source code is copied. See
+  docs/zh/PORTING-TROLLSTORE.md and docs/en/PORTING-TROLLSTORE.md.
+
+- TrollStore-tvOS (https://github.com/straight-tamago/TrollStore-tvOS) — MIT
+  License (retaining upstream notices).
+  Referenced in gap-analysis documentation for tvOS porting research only.
 
 - Relaxin (https://github.com/owngoal-dev/Relaxin) — MIT License.
   RootHide-based tvOS 17 jailbreak providing `jbctl trustcache add` at runtime.
   Not part of this repository.
 
-- Procursus (`ldid`, `uicache`, `dpkg`, `plutil`)
-  Installed on the jailbroken device via APT; not bundled in this repository.
+- roothide (https://github.com/roothide)
+  Bootstrap / vroot framework used by Relaxin (`>= 0.1.0-5`). Not bundled.
+
+- Procursus (https://github.com/ProcursusTeam/Procursus)
+  Specifically `ldid` (https://github.com/ProcursusTeam/ldid) and `uicache`
+  from `uikittools-ng` (https://github.com/ProcursusTeam/uikittools-ng),
+  installed on the jailbroken device via APT; not bundled in this repository.
 
 - vphone-cli (https://github.com/Lakr233/vphone-cli) — MIT License.
   Optional external macOS Virtualization.framework research tool referenced in
-  documentation for low-risk firmware research. Not bundled.
+  documentation. Current latest-version limitation: its tvOS presets only
+  support recent firmware around tvOS 26.6–27.x (~tvOS 27; tvOS 27+ requires
+  macOS 27 host) and cannot boot tvOS 17.x. Not bundled.
 
 5. Disclaimer of Warranty & Limitation of Liability
 ---------------------------------------------------

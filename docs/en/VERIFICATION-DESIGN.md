@@ -153,11 +153,11 @@ The real `LICENSE` files of all relevant upstream and external open-source proje
 | [`straight-tamago/TrollStore-tvOS`](https://github.com/straight-tamago/TrollStore-tvOS) | **MIT** + upstream DEP-5 retained (MIT + `uicache.m` BSD-4-Clause) | straight-tamago / Lars Fröder | tvOS adaptation reference | ✅ same as above |
 | [`opa334/ChOma`](https://github.com/opa334/ChOma) | pure **MIT** | Lars Fröder | Mach-O handling library reference | ✅ 100% MIT-compatible |
 | [`owngoal-dev/Relaxin`](https://github.com/owngoal-dev/Relaxin) | pure **MIT** | `@Lakr233` | runtime environment prerequisite / documentation reference | ✅ 100% MIT-compatible |
-| [`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli) | pure **MIT** | Lakr233 | optional virtual debugging reference / documentation reference | ✅ 100% MIT-compatible |
+| [`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli) | pure **MIT** | Lakr233 | optional virtual debugging reference / documentation reference (**current latest-version limit**: tvOS presets only support recent builds around tvOS 26.6–27.x / ~tvOS 27 and cannot run tvOS 17.x) | ✅ 100% MIT-compatible |
 | [`majd/ipatool`](https://github.com/majd/ipatool) | pure **MIT** | Majd Alfhaily | external tool documentation reference | ✅ 100% MIT-compatible |
 | [`reisxd/TizenTubeCobalt`](https://github.com/reisxd/TizenTubeCobalt) | **BSD-3-Clause** | Reis Can | external script ecosystem reference | ✅ 100% MIT-compatible |
 | [`EthanArbuckle/fairplay-decrypt`](https://github.com/EthanArbuckle/fairplay-decrypt) | **GPL-3.0** | Ethan Arbuckle | **external documentation reference only, zero source import** | ⚠️ importing the source would trigger GPL contagion and conflict with BSD-4-Clause; keeping it as an external reference means zero conflict |
-| `libarchive` / `OpenSSL 3` | **BSD-2-Clause** / **Apache-2.0** | their respective communities | optional link libraries for the native backend | ✅ both MIT-compatible (retain the corresponding NOTICE) |
+| [`libarchive`](https://github.com/libarchive/libarchive) / [`OpenSSL 3`](https://github.com/openssl/openssl) | **BSD-2-Clause** / **Apache-2.0** | their respective communities | optional link libraries for the native backend | ✅ both MIT-compatible (retain the corresponding NOTICE) |
 
 **Licensing strategy conclusions**:
 1. **Keep the main license as standard plain MIT (consistent with the TrollStore upstream main body)**:

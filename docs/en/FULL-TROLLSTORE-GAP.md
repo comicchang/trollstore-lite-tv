@@ -60,7 +60,8 @@ Because `AppleTV14,1` tvOS 17.0 is irreplaceable firmware with no USB port, proc
 1. **Offline kernel/KEXT static check**:
    - Inspect `CoreTrust` / `AMFI` inside the official `AppleTV14,1` tvOS 17.0 IPSW kernelcache to confirm CVE-2023-41991 is unpatched in that exact build.
 2. **macOS VM rehearsal ([`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli))**:
-   - Rehearse `ChOma` + `fastPathSign`, `posix_spawn` + persona root escalation, and `MCMAppContainer` + `LSApplicationWorkspace` registration inside an Apple Silicon VM before running on physical hardware.
+   - Rehearse `ChOma` + `fastPathSign`, `posix_spawn` + persona root escalation, and `MCMAppContainer` + `LSApplicationWorkspace` registration inside an Apple Silicon VM.
+   - **Current latest-version limit**: `vphone-cli`'s tvOS presets only support recent firmware around **tvOS 26.6–27.x** (~tvOS 27; tvOS 27+ requires a macOS 27 host) and **cannot boot tvOS 17.x**, so it can only assist with newer-firmware research rather than reproducing tvOS 17.0 kernel behavior.
 3. **Minimal on-device PoC (no system app modified)**:
    - Sign a minimal `HelloCT` binary/app with `fastPathSign` and **never add it to `jbctl trustcache`**.
    - Verify it executes without any trustcache entry and launches under `Type: System`; then verify once after a clean jailed reboot (without running Relaxin).
@@ -88,7 +89,7 @@ A read-only host and on-device runtime rehearsal was completed on Apple Silicon 
 ### 5.1 Firmware & Host Readiness
 
 - **Exact Apple TV firmware**: `AppleTV14,1` · **tvOS 17.0 (Build `21J354`)** · `xnu-10002.3.3~1/RELEASE_ARM64_T8110` (Aug 15, 2023) — confirmed initial 17.0 GM build prior to the 17.0.1 CVE-2023-41991 fix.
-- **Mac host status**: `arm64`, `60 GiB` free disk, **`SIP = enabled`**; `theos`, `pkg-config`, `libarchive`, `openssl`, `ldid` are not yet installed. Running `vphone-cli` locally requires lowering SIP in Recovery Mode and reserving ~35–40 GB for VM storage.
+- **Mac host status**: `arm64`, `60 GiB` free disk, **`SIP = enabled`**; `theos`, `pkg-config`, `libarchive`, `openssl`, `ldid` are not yet installed. Running [`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli) locally requires lowering SIP in Recovery Mode and reserving ~35–40 GB for VM storage; moreover, as of its current latest version, its tvOS presets only support recent builds around **tvOS 26.6–27.x** (~tvOS 27) and cannot run tvOS 17.0.
 
 ### 5.2 On-Device Runtime API Probe (All Passed via Stock Xcode SDK `dlsym`/`dlopen`)
 
@@ -109,6 +110,6 @@ Enumerating `/var/containers/Bundle/Application/*/*.app` vs `/rootfs/Application
 
 ## 6. Licensing & Compliance Boundaries
 
-- Upstream `opa334/TrollStore` and `straight-tamago/TrollStore-tvOS` are mostly MIT, with BSD-4-Clause components (`RootHelper/uicache.m`) and dependencies including `OpenSSL` (Apache-2.0), `libarchive` (BSD-2-Clause), and `ChOma` (MIT). Preserve all copyright & license notices if reusing code, or keep a clean-room boundary.
-- External tools referenced only in docs (never bundled): [`owngoal-dev/Relaxin`](https://github.com/owngoal-dev/Relaxin) (MIT), [`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli) (MIT), [`majd/ipatool`](https://github.com/majd/ipatool) (MIT), [`EthanArbuckle/fairplay-decrypt`](https://github.com/EthanArbuckle/fairplay-decrypt) (GPL-3.0).
+- Upstream [`opa334/TrollStore`](https://github.com/opa334/TrollStore) and [`straight-tamago/TrollStore-tvOS`](https://github.com/straight-tamago/TrollStore-tvOS) are mostly MIT, with BSD-4-Clause components (`RootHelper/uicache.m`) and dependencies including [`OpenSSL`](https://github.com/openssl/openssl) (Apache-2.0), [`libarchive`](https://github.com/libarchive/libarchive) (BSD-2-Clause), and [`opa334/ChOma`](https://github.com/opa334/ChOma) (MIT). Preserve all copyright & license notices if reusing code, or keep a clean-room boundary.
+- External tools referenced only in docs (never bundled): [`owngoal-dev/Relaxin`](https://github.com/owngoal-dev/Relaxin) (MIT), [`roothide`](https://github.com/roothide), [`Procursus`](https://github.com/ProcursusTeam/Procursus) ([`ldid`](https://github.com/ProcursusTeam/ldid) / [`uikittools-ng`](https://github.com/ProcursusTeam/uikittools-ng)), [`Lakr233/vphone-cli`](https://github.com/Lakr233/vphone-cli) (MIT; current latest version only supports ~tvOS 26.6–27.x / ~tvOS 27, not tvOS 17.x), [`majd/ipatool`](https://github.com/majd/ipatool) (MIT), [`EthanArbuckle/fairplay-decrypt`](https://github.com/EthanArbuckle/fairplay-decrypt) (GPL-3.0).
 - Never commit IPSWs, kernelcaches, `.p12` certificates, third-party `.ipa` files, or FairPlay credentials.

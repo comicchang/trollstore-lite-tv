@@ -12,6 +12,16 @@ dist/*.deb
 dist/*.ipa
 dist/*.tar.gz
 
-# 系统垃圾
+# 系统与本地索引垃圾
 .DS_Store
 *.swp
+.memsearch/
+
+# 敏感与第三方产物防误提交
+*.p12
+*.mobileprovision
+*credential*.bin
+*.ipsw
+*.dmp
+*.ips
+
