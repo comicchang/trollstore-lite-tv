@@ -110,14 +110,14 @@ trust_one() { # <macho> [slot]
   fi
   # 若路径触发黑名单，再经真实 /rootfs/var/tmp 绕道，并把可能被 patch 后的文件写回原路径
   if [ -d /rootfs/var/tmp ]; then
-    _name="tsltv-ts.$$.${_slot}"
-    cp "$_p" "/rootfs/var/tmp/$_name" || return 1
-    if "$JBCTL" trustcache add "/var/tmp/$_name" >/dev/null 2>&1; then
-      rm -f "$_p" && cp "/rootfs/var/tmp/$_name" "$_p" && chmod 755 "$_p"
-      rm -f "/rootfs/var/tmp/$_name"
+    _ts_name="tsltv-ts.$$.${_slot}"
+    cp "$_p" "/rootfs/var/tmp/$_ts_name" || return 1
+    if "$JBCTL" trustcache add "/var/tmp/$_ts_name" >/dev/null 2>&1; then
+      rm -f "$_p" && cp "/rootfs/var/tmp/$_ts_name" "$_p" && chmod 755 "$_p"
+      rm -f "/rootfs/var/tmp/$_ts_name"
       return 0
     fi
-    rm -f "/rootfs/var/tmp/$_name"
+    rm -f "/rootfs/var/tmp/$_ts_name"
   fi
   _t="$WORK/ts.${_slot}"
   rm -rf "$_t"; mkdir -p "$_t"
