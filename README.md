@@ -130,8 +130,7 @@ CI 覆盖 shellcheck、单元测试、本地打包与 tag 触发的 Release，�
 
 ## 与 TrollStore 的关系
 
-**不是代码 fork** —— 上游在 tvOS 上编译不过（`posix_spawn` 全家被 SDK 禁用、
-`MCMAppContainer` 类不存在、CoreTrust 路径失效）。我们做的是：
+**不是代码 fork** —— 本项目面向已越狱的 tvOS 17.x 设备，不依赖 CoreTrust 漏洞利用（公开 Xcode `AppleTVOS.sdk` 亦未暴露 `posix_spawn` 与私有容器头文件，详见 [Gap 分析与预演实测](docs/zh/FULL-TROLLSTORE-GAP.md)）。我们做的是：
 
 - **接口对齐**：`src/fork/tsh` 实现了 TrollStore `RootHelper` 的子命令约定
   （`install [force] [custom|installd] <ipa>` / `uninstall` / `refresh` / `refresh-all` …）

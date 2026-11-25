@@ -1,4 +1,4 @@
-[中文](README.md) · English
+[中文](README.md) · **English**
 
 <img src="docs/images/icon.png" width="360" alt="icon">
 
@@ -136,8 +136,7 @@ The details (why not a socket, why not fork, the state-file format, the security
 
 ## Relationship to TrollStore
 
-**Not a code fork** — upstream does not compile on tvOS (`posix_spawn` and friends are banned by
-the SDK, the `MCMAppContainer` class does not exist, the CoreTrust path is dead). What we did:
+**Not a code fork** — this project targets jailbroken tvOS 17.x devices without relying on CoreTrust exploits (stock Xcode `AppleTVOS.sdk` also omits public headers for `posix_spawn` and private container frameworks; see [Gap Analysis & Rehearsal](docs/en/FULL-TROLLSTORE-GAP.md)). What we did:
 
 - **Interface alignment**: `src/fork/tsh` implements TrollStore `RootHelper`'s subcommand
   convention (`install [force] [custom|installd] <ipa>` / `uninstall` / `refresh` / `refresh-all` …)
