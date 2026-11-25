@@ -10,7 +10,7 @@ certificate required, no CoreTrust exploit required. Think of it as TrollStore L
 [![CI](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml/badge.svg)](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> Current version **2.1.5** · Target platform **tvOS 17.x + [Relaxin](docs/en/CREDITS.md) (roothide) jailbreak** · License **MIT**
+> Current version **2.1.6** · Target platform **tvOS 17.x + [Relaxin](docs/en/CREDITS.md) (roothide) jailbreak** · License **MIT**
 
 > ⚠️ **Unofficial project**: not affiliated with opa334's [TrollStore](https://github.com/opa334/TrollStore) /
 > TrollStore Lite, and it does not reuse their code. The words "TrollStore Lite" only indicate
@@ -94,7 +94,7 @@ Neither artifact contains any Apple signing material — signing happens on the 
 ## Testing
 
 ```sh
-./tests/run.sh          # no device needed: 44 assertions (syntax / plist / usage / injection blocking / uninstall origin / precheck / Mach-O / demo ipa & icon / mod inject)
+./tests/run.sh          # no device needed: 45 assertions (syntax / plist / usage / injection blocking / uninstall origin / precheck / Mach-O / demo ipa & icon / mod inject / machoscan)
 ATV_PASS=... ./scripts/accept.sh <ip>   # needs a device: install / verify / launch / uninstall
 ```
 
@@ -111,9 +111,9 @@ CI covers shellcheck, the unit tests, local packaging and tag-triggered releases
 | iOS app (`platform 2`) | ❌ dyld refuses to load tvOS system libraries (you can change the platform, but missing APIs are on you) |
 | After a full device reboot | ⚠️ The jailbreak has to be re-run (Relaxin); once it is back, the daemon tops up trust for your apps automatically |
 
-**Real apps verified to run**: Kodi 21.3 (official tvOS build), TrollAppsTV (third-party IPA from a
-GitHub release), and several self-compiled test bundles — all started normally by `launchd`
-(PPID=1), not exec'd by hand.
+**Real apps verified to run**: Kodi 21.3 (official tvOS build), tvOS Browser (open-source `WKWebView` browser), TrollAppsTV (third-party IPA from a
+GitHub release), the bundled `TSLTVDemo`, and several self-compiled test bundles — all started normally by `launchd`
+(PPID=1). See the [App Installation Guide (Demo / Kodi / Browser)](docs/en/APPS.md).
 
 ---
 
@@ -153,6 +153,8 @@ Licensing and the scope of what we borrowed: [NOTICE](NOTICE). Porting details:
 | Document | Content |
 |---|---|
 | [docs/en/INSTALL.md](docs/en/INSTALL.md) | Install walkthrough, verification, troubleshooting, uninstall |
+| [docs/en/APPS.md](docs/en/APPS.md) | App installation guides (TSLTVDemo / Kodi / tvOS Browser / Userscript host) |
+| [docs/en/MODS.md](docs/en/MODS.md) | Native dylib injection & Cobalt userscript path |
 | [docs/en/ARCHITECTURE.md](docs/en/ARCHITECTURE.md) | Components, data flow, protocol, security model |
 | [docs/en/TESTING.md](docs/en/TESTING.md) | Test matrix, acceptance scripts, historical evidence, untested areas |
 | [docs/en/DESIGN-DECISIONS.md](docs/en/DESIGN-DECISIONS.md) | Why it is built this way, and the five routes we disproved |

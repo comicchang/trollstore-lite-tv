@@ -10,7 +10,7 @@
 [![CI](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml/badge.svg)](https://github.com/comicchang/trollstore-lite-tv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> 当前版本 **2.1.5** · 目标平台 **tvOS 17.x + [Relaxin](docs/zh/CREDITS.md)（roothide）越狱** · 许可证 **MIT**
+> 当前版本 **2.1.6** · 目标平台 **tvOS 17.x + [Relaxin](docs/zh/CREDITS.md)（roothide）越狱** · 许可证 **MIT**
 
 > ⚠️ **非官方项目**：与 opa334 的 [TrollStore](https://github.com/opa334/TrollStore) /
 > TrollStore Lite **没有隶属关系**，也未复用其代码。名字里的 "TrollStore Lite" 仅表示
@@ -89,7 +89,7 @@ open http://192.168.1.23:8787     # 把 ipa 拖进去
 ## 测试
 
 ```sh
-./tests/run.sh          # 不需要设备：44 条断言（语法/plist/用法/注入拦截/卸载护栏/预检判定/Mach-O 解析/demo ipa 与图标/mod 注入）
+./tests/run.sh          # 不需要设备：45 条断言（语法/plist/用法/注入拦截/卸载护栏/预检判定/Mach-O 解析/demo ipa 与图标/mod 注入/machoscan）
 ATV_PASS=... ./scripts/accept.sh <ip>   # 需要设备：装/验/启/卸闭环
 ```
 
@@ -106,8 +106,8 @@ CI 覆盖 shellcheck、单元测试、本地打包与 tag 触发的 Release，�
 | iOS 应用（`platform 2`） | ❌ dyld 拒绝加载 tvOS 系统库（可改 platform，但 API 缺失自负） |
 | 整机重启后 | ⚠️ 需要重新运行越狱（Relaxin）；重新越狱后应用由守护进程自动补信任 |
 
-**已验证可以跑起来的真实应用**：Kodi 21.3（官方 tvOS 构建）、TrollAppsTV（GitHub 发布的第三方 IPA）、
-若干自编译测试包 —— 全部由 `launchd` 正常启动（PPID=1），不是手动 exec 出来的。
+**已验证可以跑起来的真实应用**：Kodi 21.3（官方 tvOS 构建）、tvOS Browser（`WKWebView` 开源浏览器）、TrollAppsTV（GitHub 发布的第三方 IPA）、
+自带 `TSLTVDemo` 及多款自编译测试包 —— 全部由 `launchd` 正常启动（PPID=1），详见 [应用安装指南（Demo / Kodi / 浏览器）](docs/zh/APPS.md)。
 
 ---
 
@@ -146,6 +146,8 @@ CI 覆盖 shellcheck、单元测试、本地打包与 tag 触发的 Release，�
 | 文档 | 内容 |
 |---|---|
 | [docs/INSTALL.md](docs/zh/INSTALL.md) | 安装教程、验证、排障、卸载 |
+| [docs/APPS.md](docs/zh/APPS.md) | 常用应用安装指南（TSLTVDemo / Kodi / tvOS 浏览器 / 油猴脚本托管） |
+| [docs/MODS.md](docs/zh/MODS.md) | 原生 dylib 注入与 Cobalt 脚本注入路径 |
 | [docs/ARCHITECTURE.md](docs/zh/ARCHITECTURE.md) | 组件、数据流、协议、安全模型 |
 | [docs/TESTING.md](docs/zh/TESTING.md) | 测试矩阵、验收脚本、历史证据、未测项 |
 | [docs/DESIGN-DECISIONS.md](docs/zh/DESIGN-DECISIONS.md) | 为什么这样做，以及五条被证伪的路线 |
