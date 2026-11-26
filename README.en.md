@@ -18,6 +18,10 @@ certificate required, no CoreTrust exploit required. Think of it as TrollStore L
 > mechanism is completely different: upstream leans on the CoreTrust vulnerability, this project
 > leans on the kernel trust cache. See [Design decisions](docs/en/DESIGN-DECISIONS.md).
 
+> 💡 **Which Repo Should I Choose? (Lite vs Non-Lite CoreTrust)**
+> - **tvOS 17.0 (`21J354`) and want permanently signed apps that survive cold reboots in the unjailbroken state** → see the separate CoreTrust-based repository **[`comicchang/trollstore-tv`](https://github.com/comicchang/trollstore-tv)** (and companion packaging/signing toolkit **[`comicchang/trollstore-tv-tools`](https://github.com/comicchang/trollstore-tv-tools)**).
+> - **Any jailbroken tvOS without relying on CoreTrust exploits, or want the `:8787` web store & local offline userscript host** → stay with **TrollStore Lite TV** (pure MIT, zero exploits).
+
 ---
 
 ## What problem does it solve

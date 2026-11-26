@@ -17,6 +17,10 @@
 > **同类工具**（在越狱设备上安装未签名应用）；底层机制完全不同——上游靠 CoreTrust 漏洞，
 > 本项目靠内核信任缓存，详见 [设计取舍](docs/zh/DESIGN-DECISIONS.md)。
 
+> 💡 **选型导航（Lite vs 非 Lite CoreTrust）**：
+> - **tvOS 17.0（`21J354`）且希望冷重启后未越狱直接运行应用** → 请看基于 CoreTrust 的独立仓库 **[`comicchang/trollstore-tv`](https://github.com/comicchang/trollstore-tv)**（及配套打包/签名工具箱 **[`comicchang/trollstore-tv-tools`](https://github.com/comicchang/trollstore-tv-tools)**）。
+> - **任意已越狱 tvOS（不依赖 CoreTrust 漏洞，或需要 `:8787` 网页商店与本地离线油猴托管）** → 继续使用本仓库 **TrollStore Lite TV**（纯 MIT、零漏洞利用）。
+
 ---
 
 ## 它解决什么问题
