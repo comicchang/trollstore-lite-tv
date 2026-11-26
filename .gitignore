@@ -1,4 +1,21 @@
-# 构建产物
+# 1. Local Secrets, Env & Runtime Locks
+.env
+.env.local
+.env.*.local
+*.key
+*.p12
+*.mobileprovision
+*credential*.bin
+*.pid
+*.token
+
+# 2. Language Virtualenv, Bytecode & Test/Lint Caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 3. Native / Platform Build Outputs
 src/web/tsltvweb
 src/tools/wake
 src/tools/machocheck
@@ -7,23 +24,39 @@ src/tools/machoscan
 src/tools/entfix
 src/gui/TrollStoreLiteTV.app/
 examples/hello-tvos/.build/
-
-# 发行产物（用 scripts/build-deb.sh 生成；如需入库请显式 git add -f）
 dist/*.deb
 dist/*.ipa
 dist/*.tar.gz
 dist/stage2/
 
-# 系统与本地索引垃圾
-.DS_Store
-*.swp
-.memsearch/
-
-# 敏感与第三方产物防误提交
-*.p12
-*.mobileprovision
-*credential*.bin
+# 4. Large Binaries, Packages & Archives
 *.ipsw
 *.dmp
 *.ips
 
+# 5. Narrow Runtime Logs & Private Snapshots
+local/
+/work/
+
+# 6. Temp Files, Backups, OS & Editor Junk
+*.tmp
+*.bak
+*.orig
+*.swp
+*~
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# 7. Local Agent & Tooling Overlays
+/.drafts/
+.agents/
+.claude/
+.codex/
+.dotai/
+.omp/
+.omo/
+.serena/
+.memsearch/
+.code-review-graph/

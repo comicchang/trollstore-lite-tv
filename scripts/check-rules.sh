@@ -78,6 +78,34 @@ if silent:
     print("FAIL: Python 静默吞错:", silent, file=sys.stderr)
     sys.exit(1)
 print("PASS: Python AST 静默吞错 0 命中")
+
+import subprocess
+exts = ("*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.pdf", "*.zip", "*.tar*", "*.dylib", "*.so", "*.a", "*.ipa", "*.tipa", "*.deb", "*.bin", "*.p12", "*.car")
+tracked = set(subprocess.run(["git", "ls-files", *exts], capture_output=True, text=True, check=True).stdout.splitlines())
+allow = {
+    "docs/images/icon.png",
+    "docs/images/tv-ui.png",
+    "docs/images/web-store.png",
+    "src/gui/Assets.xcassets/AppIcon.brandassets/AppIconLarge.imagestack/Back.imagestacklayer/Content.imageset/Back.png",
+    "src/gui/Assets.xcassets/AppIcon.brandassets/AppIconLarge.imagestack/Middle.imagestacklayer/Content.imageset/Middle.png",
+    "src/gui/Assets.xcassets/AppIcon.brandassets/AppIconSmall.imagestack/Back.imagestacklayer/Content.imageset/Back.png",
+    "src/gui/Assets.xcassets/AppIcon.brandassets/AppIconSmall.imagestack/Middle.imagestacklayer/Content.imageset/Middle.png",
+}
+unexpected = sorted(tracked - allow)
+if unexpected:
+    print("FAIL: 白名单外已追踪二进制:", unexpected, file=sys.stderr)
+    sys.exit(1)
+print("PASS: 追踪二进制白名单门禁 0 违规")
 PY
+
+gi_ok=1
+for _ig in .env .DS_Store .omp/x .agents/x .memsearch/x; do
+  git -c core.excludesFile=/dev/null check-ignore -q "$_ig" || gi_ok=0
+done
+if [ "$gi_ok" -eq 1 ]; then
+  pass ".gitignore 脱离全局配置自洽"
+else
+  fail ".gitignore 未能独立拦截 .env / .DS_Store / Agent 目录"
+fi
 
 [ "$FAIL" -eq 0 ]

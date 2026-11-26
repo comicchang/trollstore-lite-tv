@@ -1,0 +1,40 @@
+name: Bug Report
+description: Report a reproducible bug in TrollStore Lite TV
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - CLI (tsltv / tsh)
+        - Daemon (tsltvd / retrust.sh)
+        - TV UI (TrollStoreLiteTV.app)
+        - Web Store (:8787 / userscripts)
+        - Native Tools (entfix / machoscan / modinject)
+        - Build / Packaging (.deb)
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Device & tvOS / Jailbreak Version
+      placeholder: "Apple TV 4K, tvOS 17.0, Relaxin (roothide)"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction Steps & Raw Output
+      description: Include commands and sanitized logs (remove real LAN IPs, passwords, UDIDs, and jbroot UUIDs).
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy & Compliance Check
+      options:
+        - label: I have redacted private LAN IPs, passwords, credentials, and personal device identifiers.
+          required: true
+        - label: I am NOT attaching or requesting proprietary third-party IPAs or decryption keys.
+          required: true
