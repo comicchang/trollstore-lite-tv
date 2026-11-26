@@ -57,41 +57,37 @@ need_root() {
 
 # ---------- 底层原语 ----------
 
-# 生成最小可用 entitlements，application-identifier 必须等于自身 bundle id
-gen_ent() { # <bid> <out>
-  cat > "$2" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>application-identifier</key><string>$1</string>
-<key>get-task-allow</key><true/>
-<key>platform-application</key><true/>
-<key>com.apple.private.security.no-sandbox</key><true/>
-<key>com.apple.private.security.no-container</key><true/>
-<key>com.apple.private.security.container-required</key><false/>
-<key>com.apple.security.network.client</key><true/>
-<key>com.apple.security.network.server</key><true/>
-<key>com.apple.security.iokit-user-client-class</key>
-<array>
-<string>AGXCommandQueue</string>
-<string>AGXDevice</string>
-<string>AGXDeviceUserClient</string>
-<string>AGXSharedUserClient</string>
-<string>IOAccelerator</string>
-<string>IOAccelDevice</string>
-<string>IOAccelContext</string>
-<string>IOAccelDevice2</string>
-<string>IOAccelContext2</string>
-<string>IOAccelSharedUserClient</string>
-<string>IOSurfaceRootUserClient</string>
-</array>
-</dict></plist>
-EOF
+# ---------- 签名 / entitlements（对齐 opa334/TrollStore RootHelper · signApp）----------
+# 上游规则：
+#   1. 每个 bundle 的主可执行沿用其原有 entitlements；主 app 若没有任何 entitlements，
+#      回落 Xcode 风格的最小集合（application-identifier=TROLLTROLL.* 等）。
+#   2. container-required 归一：布尔 true 且无 no-container/no-sandbox 时写成字符串 bundle-id；
+#      字符串（自定义容器）原样保留；布尔 false 不动。
+#   3. TrollStore Lite 额外写 jb.pmap_cs.custom_trust=PMAP_CS_APP_STORE。
+#   4. 其余 Mach-O（dylib/appex 附属二进制）用 ldid -s 合并式签名，保留各自原有 entitlements；
+#      与上游 signAdhoc(appPath, nil)（ldid -s，merge=true）语义一致。
+
+dump_ent() { # <macho> <out>  读不到 / 无签名 → 空文件（等价上游 dumpEntitlements 返回 nil）
+  ldid -e "$1" > "$2" 2>/dev/null || : > "$2"
 }
 
-# 双哈希 ad-hoc 签名（单哈希必死）
-sign_one() { # <macho> <ent>
+ent_fix() { # <bid> <in> <out> [fallback]
+  _ef="$BASE/entfix"
+  [ -x "$_ef" ] || return 127
+  # entfix 只走 stdin/stdout，由 shell 重定向（ad-hoc 进程直接读写绝对路径会被 tvOS 拒）
+  if [ "${4:-}" = "fallback" ]; then
+    "$_ef" --fallback --lite-pmap "$1" < "$2" > "$3"
+  else
+    "$_ef" --lite-pmap "$1" < "$2" > "$3"
+  fi
+}
+
+sign_ent() { # <macho> <ent>  覆盖式签名（对应上游 signAdhoc(binary, entitlements)）
   ldid -S"$2" -Cadhoc -Hsha1 -Hsha256 "$1" 2>/dev/null
+}
+
+sign_merge() { # <macho>  合并式 ad-hoc 签名（对应上游 signAdhoc(appPath, nil)，保留已有 entitlements）
+  ldid -s -Cadhoc -Hsha1 -Hsha256 "$1" 2>/dev/null
 }
 
 # 写内核信任缓存。jbctl 对 /var/containers/Bundle/Application/** 有路径黑名单，
@@ -408,12 +404,13 @@ cmd_mods() { # list | apply <bundle-id> <dylib>
       cp "$_mstage" "$_p/$_exe" && chmod 755 "$_p/$_exe" || { rm -f "$_mstage"; die "写回主程序失败"; }
       rm -f "$_mstage"
 
-      # 主程序保留完整 entitlements 重签，dylib 以纯 ad-hoc 双哈希签名，两者重新入信任缓存
+      # 主程序沿用原 entitlements（容器规则归一后）重签；注入的 dylib 做合并式 ad-hoc 签名
       mkdir -p "$WORK"
-      gen_ent "$_bid" "$WORK/ent.plist"
-      sign_one "$_p/$_exe" "$WORK/ent.plist" || { rm -rf "$WORK"; die "主程序签名失败"; }
+      dump_ent "$_p/$_exe" "$WORK/mod.ent.raw"
+      ent_fix "$_bid" "$WORK/mod.ent.raw" "$WORK/mod.ent.plist" || { rm -rf "$WORK"; die "entitlements 处理失败（缺 entfix？）"; }
+      sign_ent "$_p/$_exe" "$WORK/mod.ent.plist" || { rm -rf "$WORK"; die "主程序签名失败"; }
       trust_one "$_p/$_exe" 1 || { rm -rf "$WORK"; die "主程序信任注入失败"; }
-      sign_one "$_p/Frameworks/$_name" "$WORK/ent.plist" || { rm -rf "$WORK"; die "dylib 签名失败"; }
+      sign_merge "$_p/Frameworks/$_name" || { rm -rf "$WORK"; die "dylib 签名失败"; }
       trust_one "$_p/Frameworks/$_name" 2 || { rm -rf "$WORK"; die "dylib 信任注入失败"; }
       rm -rf "$WORK" 2>/dev/null || true
 
@@ -591,20 +588,18 @@ cmd_verify() {
     [ -f "$exe" ] || { say "$bid: 缺可执行文件 $exe"; bad=$((bad+1)); continue; }
     cd=$(cdhash_of "$exe")
     ent=$(printf '%s' "$_tc" | grep -ic -- "$cd")
-    has_hrcfb=$(ldid -e "$exe" 2>/dev/null | grep -c 'get-task-allow')
     has_adhoc=$(ldid -h "$exe" 2>/dev/null | grep -c 'flags=0x2(adhoc)')
     reg=$(printf '%s' "$_ui" | grep -c -- "$bid")
     origin=$(state_origin "$bid")
-    # get-task-allow 只对本工具自签的包是硬要求；
-    # 越狱自带 app（origin=adopt）走 Relaxin 自己的签名通道，没有该键也能运行。
-    need_hrcfb=0; [ "$origin" = install ] && need_hrcfb=1
-    if [ "$ent" -ge 1 ] && [ "$has_adhoc" -ge 1 ] && [ "$reg" -ge 1 ] \
-       && { [ "$need_hrcfb" = 0 ] || [ "$has_hrcfb" -ge 1 ]; }; then
-      printf 'PASS  %-32s cdhash=%s…  origin=%s hrcfb=%s\n' \
-        "$bid" "$(printf %.12s "$cd")" "$origin" "$has_hrcfb"
+    # 信任（cdhash 在内核缓存）+ ad-hoc 签名 + 已注册即可运行。
+    # 不把 get-task-allow 等具体 entitlement 当门槛：上游 TrollStore 同样保留各 app
+    # 原有 entitlements（Kodi / YouTube 等本来就没有 get-task-allow）。
+    if [ "$ent" -ge 1 ] && [ "$has_adhoc" -ge 1 ] && [ "$reg" -ge 1 ]; then
+      printf 'PASS  %-32s cdhash=%s…  origin=%s\n' \
+        "$bid" "$(printf %.12s "$cd")" "$origin"
     else
-      printf 'FAIL  %-32s 信任=%s hrcfb=%s adhoc=%s 注册=%s origin=%s\n' \
-        "$bid" "$ent" "$has_hrcfb" "$has_adhoc" "$reg" "$origin"
+      printf 'FAIL  %-32s 信任=%s adhoc=%s 注册=%s origin=%s\n' \
+        "$bid" "$ent" "$has_adhoc" "$reg" "$origin"
       bad=$((bad+1))
     fi
   done
@@ -742,7 +737,27 @@ cmd_install() {
   precheck_app "$app" "$exe_name" || exit 1
   trace "precheck-done"
 
+  # 加密的嵌套二进制：上游 Lite 的规则是主程序致命、其余仅告警（安装继续）
+  if [ -x "$BASE/machoscan" ]; then
+    _enc=$("$BASE/machoscan" -e "$app" 2>/dev/null) || _enc=""
+    if printf '%s\n' "$_enc" | grep -Fxq "$app/$exe_name"; then
+      die "主程序是加密的（cryptid≠0），无法安装"
+    fi
+    if [ -n "$_enc" ]; then
+      say "警告: 包内存在加密的嵌套二进制，相关组件安装后可能无法加载："
+      printf '%s\n' "$_enc" | head -5 | sed 's/^/    /'
+    fi
+  fi
+
   dest=/Applications/$(basename "$app")
+  # 更新已装应用：沿用记账路径；同名目录若不是本工具安装的则拒绝覆盖
+  # （对齐上游 installApp 的 171 护栏：existing app 且无 TrollStore 标记 → 拒绝）
+  _prev_path=$(state_path "$bid" 2>/dev/null || true)
+  if [ -n "$_prev_path" ] && [ -d "$_prev_path" ] && [ "$(state_origin "$bid" 2>/dev/null)" = install ]; then
+    dest=$_prev_path
+  elif [ -e "$dest" ] || { [ -n "$JB" ] && [ -e "$JB$dest" ]; }; then
+    die "目标已存在且不是本工具安装的：$dest（拒绝覆盖）"
+  fi
   say "==> $bid"
   say "    源: $app"
   say "    目标: $dest"
@@ -756,16 +771,42 @@ cmd_install() {
   fi
   trace "copied"
 
-  gen_ent "$bid" "$WORK/ent.plist"
-
   signed=0; trusted=0; failed=0
   # 遍历所有嵌套 Mach-O（主可执行 / Frameworks / PlugIns / appex）
   # App Store 包（尤其解密后的 ipa）会带 SC_Info / _CodeSignature。
-  # 这些是 FairPlay 的元数据，留着会让 LaunchServices 直接拒绝注册
-  # （uicache: "Unable to register"），必须在签名前清掉。
-  rm -rf "$dest/SC_Info" "$dest/_CodeSignature" 2>/dev/null || true
-  # /Applications 下的应用及全部子目录需要 mobile 可读可执行，否则启动时读不到 .lproj / Frameworks
-  chmod -R a+rX "$dest" 2>/dev/null || true
+  # 这些是 FairPlay / CodeResources 元数据，留着会让 LaunchServices 拒绝注册
+  # （uicache: "Unable to register"）。主包与嵌套 appex/framework 都要清。
+  find "$dest" -type d \( -name SC_Info -o -name _CodeSignature \) 2>/dev/null | while IFS= read -r _sigdir; do
+    rm -rf "$_sigdir"
+  done
+
+  # ① 先按 bundle 逐个签名：上游 signApp 会枚举所有 Info.plist（跳过 FMWK），
+  #    用各 bundle 原有的 entitlements（主 app 为空则回落 TROLLTROLL.*）覆盖签名。
+  : > "$WORK/bundles.tsv"
+  find "$dest" -name Info.plist 2>/dev/null | while IFS= read -r _ip; do
+    _dir=${_ip%/Info.plist}
+    _ptype=$(_plist_get "$_ip" CFBundlePackageType)
+    [ "$_ptype" = "FMWK" ] && continue
+    _bbid=$(_plist_get "$_ip" CFBundleIdentifier)
+    _bexe=$(_plist_get "$_ip" CFBundleExecutable)
+    [ -n "$_bbid" ] && [ -n "$_bexe" ] || continue
+    [ -f "$_dir/$_bexe" ] || continue
+    printf '%s\t%s\n' "$_dir/$_bexe" "$_bbid" >> "$WORK/bundles.tsv"
+  done
+
+  _bi=0
+  while IFS='	' read -r _bexe_path _bbid; do
+    [ -n "$_bexe_path" ] || continue
+    _bi=$((_bi+1))
+    dump_ent "$_bexe_path" "$WORK/ent.$_bi.raw"
+    if [ "$_bexe_path" = "$dest/$exe_name" ]; then
+      ent_fix "$_bbid" "$WORK/ent.$_bi.raw" "$WORK/ent.$_bi.plist" fallback || die "entitlements 处理失败（缺 entfix？）"
+    else
+      ent_fix "$_bbid" "$WORK/ent.$_bi.raw" "$WORK/ent.$_bi.plist" || die "entitlements 处理失败（缺 entfix？）"
+    fi
+    sign_ent "$_bexe_path" "$WORK/ent.$_bi.plist" || die "bundle 主程序签名失败: $_bexe_path"
+  done < "$WORK/bundles.tsv"
+  trace "bundle-signed n=$_bi"
 
   # 优先用单进程 C 扫描器 machoscan（Kodi 12000+ 文件 <0.1s，避免 shell 逐文件 fork 耗时十几分钟）
   : > "$WORK/machos.list"
@@ -790,7 +831,7 @@ cmd_install() {
     [ -n "$_mf" ] || continue
     _idx=$((_idx+1))
     (
-      if sign_one "$_mf" "$WORK/ent.plist"; then
+      if sign_merge "$_mf"; then
         if trust_one "$_mf" "$_idx"; then
           echo "st" > "$WORK/st/$_idx"
         else
@@ -817,6 +858,26 @@ cmd_install() {
   done
 
   trace "signed-trusted n=$signed/$trusted"
+  if [ "$failed" -ne 0 ]; then
+    uicache -u "$dest" >/dev/null 2>&1 || true
+    rm -rf "$dest"
+    state_del "$bid" 2>/dev/null || true
+    rm -rf "$WORK" 2>/dev/null || true
+    say "==> 签名/信任失败 $failed 个，已回滚本次安装"
+    return 1
+  fi
+
+  # ② 权限对齐上游 fixPermissionsOfAppBundle：33:33 属主、文件 0644、目录与 Mach-O 0755
+  _real="$dest"
+  [ -n "$JB" ] && [ -d "$JB$dest" ] && _real="$JB$dest"
+  chown -R 33:33 "$_real" 2>/dev/null || true
+  chmod -R 0644 "$_real" 2>/dev/null || true
+  find "$_real" -type d 2>/dev/null | tr '\n' '\0' | xargs -0 chmod 0755 2>/dev/null || true
+  if [ -x "$BASE/machoscan" ]; then
+    "$BASE/machoscan" "$_real" 2>/dev/null | tr '\n' '\0' | xargs -0 chmod 0755 2>/dev/null || true
+  fi
+  trace "permissions-fixed"
+
   uicache -p "$dest" >/dev/null 2>&1
   trace "uicached"
 
@@ -829,7 +890,7 @@ cmd_install() {
   say "==> 完成: $dest"
   say "    cdhash: $cd"
   say "    启动:  uiopen --bundleid $bid"
-  [ "$failed" -eq 0 ] || return 1
+  return 0
 }
 
 cmd_uninstall() {

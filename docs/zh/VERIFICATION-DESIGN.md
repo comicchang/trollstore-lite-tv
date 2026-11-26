@@ -209,7 +209,7 @@ Stage 1 已实现为可重复执行的宿主机闸门 [`tests/stage1/run.sh`](..
 | 系统 | `tvOS 17.0 (21J354)` |
 | 实验前 uptime | 124 天（实验期间连续，未重启） |
 | 实验前 trustcache | 587 / 740 |
-| 生产基线 | `tsltv verify` 7/7 `PASS`；`installed.tsv` sha256 `51f98000…` |
+| 生产基线 | `tsltv verify` 7/7 `PASS`；`installed.tsv` sha256 `<baseline-sha256>` |
 | 测试对象 | `com.tsltv.verify.probe`；容器内主二进制与源文件哈希一致 |
 
 ### 9.2 分项结果
@@ -248,7 +248,7 @@ Stage 1 已实现为可重复执行的宿主机闸门 [`tests/stage1/run.sh`](..
 - `killall VerifyProbe`：无进程。
 - `tsverify cleanup`：`unregister=1 deleted=1`；`tsverify query`：`installed=0 type=(nil) path=(nil)`。
 - 应用容器与数据容器均已删除；`/var/tmp/tsltv-verify-*` 已删除；`uicache -l` 无 `tsltv.verify` 注册。
-- `tsltv verify`：7/7 `PASS`；`installed.tsv` sha256 `51f98000c231828894ba313189c6344606f5f781d264a6f3c0ae5e72e2a3677e`，与实验前一致。
+- `tsltv verify`：7/7 `PASS`；`installed.tsv` sha256 `<baseline-sha256>`，与实验前一致。
 - uptime 124 天 10:53，未重启。
 - trustcache 599/740：测试 cdhash 为惰性残留，对应文件已删除，不可再执行；重启后自然清空。
 

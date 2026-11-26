@@ -20,13 +20,14 @@ ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   → 
 | Requirement | Explanation |
 |---|---|
 | **Dual-hash signature** | Signing only sha1 or only sha256 makes the process die instantly, with no log whatsoever |
-| **`get-task-allow`** | Without it the process is judged to have "invalid code pages" and killed. `platform-application`, `no-sandbox` and `no-container` are needed as well |
-| **`application-identifier` matches the bundle id** | Signing B with A's entitlements is rejected silently |
-| **GPU IOKit entitlements** (OpenGL ES / Metal apps) | Missing `com.apple.security.iokit-user-client-class` (`AGX*` / `IOAccel*` / `IOSurfaceRootUserClient`) causes `EAGLContext` initialization to return `nil`; included automatically by `tsltv` since 2.1.5 |
+| **Entitlements follow the original signature** | Same as upstream `opa334/TrollStore` RootHelper `signApp`: each bundle's main executable keeps its own entitlements; only a main app with none at all falls back to `TROLLTROLL.*`. `get-task-allow` / `application-identifier` are no longer force-injected |
+| **Container-field normalization** | Container is required by default; without `no-container` / `no-sandbox` the tool writes `container-required=<bundle-id>` (string). A custom container id string is preserved as-is |
+| **Lite trust level** | TrollStore Lite additionally writes `jb.pmap_cs.custom_trust=PMAP_CS_APP_STORE` (PMAP_CS devices then run ad-hoc binaries at App Store trust level) |
+| **GPU IOKit entitlements** (OpenGL ES / Metal apps) | `com.apple.security.iokit-user-client-class` is already present in App Store / decrypted bundles' entitlements and is preserved; only the fallback `TROLLTROLL.*` set (source has no entitlements at all) lacks it |
 
-> Exception: apps that ship with the jailbreak (irisin, for example) go through Relaxin's own
-> signing channel and run without `get-task-allow`. That is why `tsltv verify` applies different
-> rules depending on `origin=install|adopt`.
+> Runtime criteria: cdhash in the kernel trust cache + ad-hoc signature + registered.
+> `tsltv verify` no longer treats `get-task-allow` as a hard gate (upstream likewise preserves each
+> app's original entitlements).
 
 ---
 
@@ -110,11 +111,12 @@ serial shell). Hence:
      - cryptid != 0  → reject (encrypted bundle)
      - platform = 2  → warn (iOS bundle)
      - minos > 17.0  → warn (OS version too new)
-4. Copy to /Applications/<Name>.app
-5. Generate entitlements (application-identifier = that app's bundle id)
+4. Copy to /Applications/<Name>.app; recursively remove SC_Info / _CodeSignature from the main bundle and nested appex/frameworks
+5. Read each bundle's original entitlements and normalize container fields (fallback to TROLLTROLL.* only when the main app has none; Lite writes pmap_cs)
 6. Walk every Mach-O (main executable + Frameworks + PlugIns + appex):
-     ldid dual-hash ad-hoc signing → jbctl trustcache add
-7. Register with uicache -p
+     each bundle main executable is re-signed with its own entitlements; all other binaries use
+     ldid -s merge signing (preserving existing entitlements) → jbctl trustcache add
+7. Align permissions (owner 33:33; files 0644, directories and Mach-Os 0755) → register with uicache -p
 8. Write installed.tsv
 ```
 

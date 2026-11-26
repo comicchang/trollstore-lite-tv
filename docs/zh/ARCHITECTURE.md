@@ -19,12 +19,12 @@ ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   → 
 | 条件 | 说明 |
 |---|---|
 | **双哈希签名** | 只签 sha1 或只签 sha256 会导致进程秒退，且没有任何日志 |
-| **`get-task-allow`** | 少了它进程会被判"invalid code pages"直接杀。同时需要 `platform-application`、`no-sandbox`、`no-container` |
-| **`application-identifier` 与 bundle id 一致** | 用 A 的 entitlement 签 B 会被静默拒绝 |
-| **GPU IOKit entitlements**（OpenGL ES / Metal 应用） | 缺少 `com.apple.security.iokit-user-client-class`（`AGX*` / `IOAccel*` / `IOSurfaceRootUserClient`）会导致 `EAGLContext` 初始化返回 `nil`；`tsltv` 2.1.5 起已自动签入 |
+| **entitlements 沿用原签名** | 与上游 `opa334/TrollStore` RootHelper 的 `signApp` 一致：每个 bundle 的主可执行保留自身 entitlements；只有主 app 完全没有 entitlements 时才回落 `TROLLTROLL.*`。不再强制注入 `get-task-allow` / `application-identifier` |
+| **容器字段归一** | 缺省视为需要容器；没有 `no-container` / `no-sandbox` 时写 `container-required=<bundle-id>`（字符串），自定义容器 id 原样保留 |
+| **Lite 信任级** | TrollStore Lite 额外写 `jb.pmap_cs.custom_trust=PMAP_CS_APP_STORE`（PMAP_CS 设备以 App Store 信任级运行 ad-hoc 签名） |
+| **GPU IOKit entitlements**（OpenGL ES / Metal 应用） | `com.apple.security.iokit-user-client-class` 原本就在 App Store / 解密包的 entitlements 里，保留即可；只有源包完全没有 entitlements 时回落的 `TROLLTROLL.*` 不含该键 |
 
-> 例外：越狱自带的应用（例如 irisin）走 Relaxin 自己的签名通道，没有 `get-task-allow`
-> 也能跑。`tsltv verify` 因此按 `origin=install|adopt` 区分规则。
+> 运行判据：cdhash 在内核信任缓存 + ad-hoc 签名 + 已注册。`tsltv verify` 不再把 `get-task-allow` 当作硬门槛（上游同样保留各应用原样 entitlements）。
 
 ---
 
@@ -105,11 +105,12 @@ tvOS 上有两条硬限制，把常见做法全堵死了：
      - cryptid != 0  → 拒绝（加密包）
      - platform = 2  → 警告（iOS 包）
      - minos > 17.0  → 警告（系统版本过高）
-4. 复制到 /Applications/<Name>.app
-5. 生成 entitlement（application-identifier = 该 app 的 bundle id）
+4. 复制到 /Applications/<Name>.app，递归清理主包与嵌套 appex/framework 的 SC_Info / _CodeSignature
+5. 按 bundle 读取原有 entitlements 并归一容器字段（主 app 为空才回落 TROLLTROLL.*，Lite 写 pmap_cs）
 6. 遍历所有 Mach-O（主可执行 + Frameworks + PlugIns + appex）：
-     ldid 双哈希 ad-hoc 签名 → jbctl trustcache add
-7. uicache -p 注册
+     bundle 主可执行用各自 entitlements 覆盖签名；其余二进制 ldid -s 合并式签名（保留原 ent）
+     → jbctl trustcache add
+7. 权限对齐（33:33 属主；文件 0644，目录与 Mach-O 0755）→ uicache -p 注册
 8. 写入 installed.tsv
 ```
 

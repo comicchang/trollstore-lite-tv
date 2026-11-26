@@ -20,8 +20,8 @@ ldid 做 ad-hoc 双哈希签名  →  把该二进制的 sha256 cdhash 写进 Re
 三个必要条件（任何一条不满足就静默退出、零日志）：
 
 1. `ldid -S<ent> -Cadhoc -Hsha1 -Hsha256` —— 只签 sha1 或只签 sha256 会秒死
-2. entitlements 含 `get-task-allow` + `platform-application` + `no-sandbox`
-3. `application-identifier` 与 app 自己的 bundle id 一致
+2. entitlements 沿用各 bundle 原签名（上游 `TrollStore RootHelper · signApp` 语义）：bundle 主可执行保留自身 entitlements，主 app 完全没有时才回落 `TROLLTROLL.*`；不再强制注入 `get-task-allow` / `application-identifier`
+3. 容器字段归一（缺省需要容器且无 `no-container`/`no-sandbox` → `container-required=<bundle-id>`；Lite 额外写 `jb.pmap_cs.custom_trust`）
 
 ---
 

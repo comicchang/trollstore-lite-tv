@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — 2026-11-26
+
+- **entitlements 与上游 TrollStore RootHelper 对齐**（`opa334/TrollStore · signApp`）：
+  - 每个 bundle 的主可执行保留自身 entitlements；只有主 app 完全没有 entitlements 时才回落 `TROLLTROLL.*`；
+  - `container-required` 归一（缺省需要容器且无 `no-container`/`no-sandbox` → 写字符串 bundle id，自定义容器 id 原样保留）；
+  - TrollStore Lite 额外写 `jb.pmap_cs.custom_trust=PMAP_CS_APP_STORE`；
+  - 其余 Mach-O 改用 `ldid -s` 合并式签名，保留各自原 entitlements（不再用一份固定 ent 覆盖所有二进制）。
+- **新增 `entfix` 工具**：standalone 实现上述规则，输入/输出全部走 stdin/stdout。tvOS 上 ad-hoc + 信任缓存进程直接读写绝对路径会被 RootHide/vroot 拒绝（`open` 返回 `ENOENT`），因此由受信 shell 负责重定向。
+- **嵌套包清理**：安装前递归删除主包及嵌套 appex/framework 的 `SC_Info` / `_CodeSignature`，避免残留 App Store CodeResources 导致注册失败。
+- **嵌套加密二进制检测**：`machoscan -e` 按上游 Lite 语义扫描全部 Mach-O（Fat 取 arm64 首选 slice）；主程序加密致命，其余仅告警。
+- **安装护栏与权限**：目标已存在且非本工具安装时拒绝覆盖；签名/信任失败自动回滚；安装后按上游 `fixPermissionsOfAppBundle` 设为 `33:33` 属主、文件 `0644`、目录与 Mach-O `0755`。
+- **`tsltv verify` 去掉自造门槛**：不再要求 `get-task-allow`，改以「信任缓存命中 + ad-hoc 签名 + 已注册」为通过判据。
+- 测试新增 entfix 规则（回落/容器/字符串容器/布尔 false/非 dict 拒绝）与 `machoscan -e`（thin + Fat）覆盖，共 57 条全过。
+
 ## 2.1.6 — 2026-11-25
 
 - **修复 roothide vroot 路径桥接根因（trustcache + modinject）**：

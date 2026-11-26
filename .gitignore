@@ -4,6 +4,7 @@ src/tools/wake
 src/tools/machocheck
 src/tools/modinject
 src/tools/machoscan
+src/tools/entfix
 src/gui/TrollStoreLiteTV.app/
 examples/hello-tvos/.build/
 

@@ -19,4 +19,8 @@ cd "$(dirname "$0")"
 [ -f machoscan.c ] && clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -O2 \
     machoscan.c -o machoscan
 
-ls -l machocheck wake modinject machoscan 2>/dev/null || true
+# entfix: 按上游 TrollStore RootHelper 的规则修正 entitlements（容器/回落/pmap_cs）
+[ -f entfix.m ] && clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -fobjc-arc \
+    -framework Foundation entfix.m -o entfix
+
+ls -l machocheck wake modinject machoscan entfix 2>/dev/null || true

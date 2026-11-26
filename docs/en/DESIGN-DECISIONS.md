@@ -20,8 +20,8 @@ ldid ad-hoc dual-hash signing  →  write the binary's sha256 cdhash into the Re
 Three hard requirements (fail any one and the process exits silently, with zero logs):
 
 1. `ldid -S<ent> -Cadhoc -Hsha1 -Hsha256` — signing only sha1 or only sha256 dies instantly
-2. entitlements must include `get-task-allow` + `platform-application` + `no-sandbox`
-3. `application-identifier` must match the app's own bundle id
+2. Entitlements follow each bundle's original signature (upstream `TrollStore RootHelper · signApp` semantics): a bundle main executable keeps its own entitlements, and only a main app with none falls back to `TROLLTROLL.*`. `get-task-allow` / `application-identifier` are no longer force-injected
+3. Container-field normalization (container required by default; without `no-container`/`no-sandbox` write `container-required=<bundle-id>`; Lite additionally writes `jb.pmap_cs.custom_trust`)
 
 ---
 

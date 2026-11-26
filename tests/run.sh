@@ -133,6 +133,111 @@ case "$warn" in *"iOS 平台"*) ok "iOS 警告文案出现" ;; *) bad "缺少 iO
 warn=$(TSLTV_LIB_ONLY=1 sh -c ". \"$CLI\"; precheck_verdict 'platform=3 minos=18.0 cryptid=0'" 2>&1)
 case "$warn" in *"高于本机"*) ok "minOS 警告文案出现" ;; *) bad "缺少 minOS 警告" ;; esac
 
+# ---------------------------------------------------------------- 5b. entitlements / 加密对齐
+group "entitlements 对齐（entfix）与加密扫描"
+ENTFIX="$TMP/entfix"
+if command -v clang >/dev/null 2>&1 && \
+   clang -fobjc-arc -framework Foundation -O2 "$ROOT/src/tools/entfix.m" -o "$ENTFIX" 2>/dev/null && \
+   [ -x "$ENTFIX" ] && command -v python3 >/dev/null 2>&1; then
+  ent_field() { # <plist> <key>
+    python3 - "$1" "$2" <<'EOP'
+import plistlib, sys
+try:
+    d = plistlib.loads(open(sys.argv[1], 'rb').read())
+except Exception:
+    print('<unreadable>'); sys.exit(0)
+v = d.get(sys.argv[2], '<absent>')
+if isinstance(v, bool):
+    print('true' if v else 'false')
+elif isinstance(v, list):
+    print(','.join(str(x) for x in v))
+else:
+    print(v)
+EOP
+  }
+  : > "$TMP/ent.empty"
+  "$ENTFIX" --fallback --lite-pmap com.example.app < "$TMP/ent.empty" > "$TMP/ent.a.plist" 2>/dev/null
+  [ "$(ent_field "$TMP/ent.a.plist" application-identifier)" = "TROLLTROLL.*" ] \
+    && ok "主 app 无 entitlements 时回落 TROLLTROLL.*" || bad "回落 application-identifier 不正确"
+  [ "$(ent_field "$TMP/ent.a.plist" com.apple.private.security.container-required)" = "com.example.app" ] \
+    && ok "缺省需要容器 → container-required=<bundle-id>" || bad "container-required 归一失败"
+  [ "$(ent_field "$TMP/ent.a.plist" jb.pmap_cs.custom_trust)" = "PMAP_CS_APP_STORE" ] \
+    && ok "Lite 写入 pmap_cs 信任级" || bad "缺 jb.pmap_cs.custom_trust"
+
+  cat > "$TMP/ent.raw.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.private.security.no-container</key><true/>
+<key>com.apple.security.iokit-user-client-class</key><array><string>AGXDevice</string></array>
+</dict></plist>
+EOF
+  "$ENTFIX" --lite-pmap com.example.nocontainer < "$TMP/ent.raw.plist" > "$TMP/ent.b.plist" 2>/dev/null
+  [ "$(ent_field "$TMP/ent.b.plist" com.apple.private.security.container-required)" = "<absent>" ] \
+    && ok "no-container=true 时不强塞 container-required" || bad "no-container 场景被改写"
+  [ "$(ent_field "$TMP/ent.b.plist" com.apple.security.iokit-user-client-class)" = "AGXDevice" ] \
+    && ok "原有 entitlement 原样保留" || bad "原有 entitlement 丢失"
+
+  cat > "$TMP/ent.str.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.private.security.container-required</key><string>custom.container</string>
+</dict></plist>
+EOF
+  "$ENTFIX" --lite-pmap com.example.custom < "$TMP/ent.str.plist" > "$TMP/ent.c.plist" 2>/dev/null
+  [ "$(ent_field "$TMP/ent.c.plist" com.apple.private.security.container-required)" = "custom.container" ] \
+    && ok "字符串容器 id 原样保留" || bad "自定义容器 id 被改写"
+
+  cat > "$TMP/ent.false.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.private.security.container-required</key><false/>
+</dict></plist>
+EOF
+  "$ENTFIX" --lite-pmap com.example.noreq < "$TMP/ent.false.plist" > "$TMP/ent.d.plist" 2>/dev/null
+  [ "$(ent_field "$TMP/ent.d.plist" com.apple.private.security.container-required)" = "false" ] \
+    && ok "container-required=false 保留布尔值" || bad "布尔 false 被改写"
+
+  printf '<plist version="1.0"><array><string>x</string></array></plist>\n' > "$TMP/ent.arr.plist"
+  if "$ENTFIX" com.example.bad < "$TMP/ent.arr.plist" > "$TMP/ent.e.plist" 2>/dev/null; then
+    bad "根节点非 dict 竟然通过"
+  else
+    ok "根节点非 dict 拒绝"
+  fi
+else
+  ok "跳过 entfix（无 clang/Foundation/python3）"
+fi
+
+if cc -O2 "$ROOT/src/tools/machoscan.c" -o "$TMP/ms-e" 2>/dev/null && command -v python3 >/dev/null 2>&1; then
+  mkdir -p "$TMP/encdir"
+  python3 - "$TMP/encdir" <<'EOP'
+import os, struct, sys
+out = sys.argv[1]
+def macho(cryptid):
+    lc = struct.pack('<IIIIII', 0x2c, 24, 0, 4096, cryptid, 0)
+    hdr = struct.pack('<IiiIIIII', 0xfeedfacf, 0x0100000c, 0, 2, 1, len(lc), 0, 0)
+    return hdr + lc
+def fat(payload):
+    arch = struct.pack('>iiIII', 0x0100000c, 0, 4096, len(payload), 12)
+    return struct.pack('>II', 0xcafebabe, 1) + arch + b'\0' * (4096 - 8 - len(arch)) + payload
+open(os.path.join(out, 'plain'), 'wb').write(macho(0))
+open(os.path.join(out, 'crypt'), 'wb').write(macho(1))
+open(os.path.join(out, 'crypt-fat'), 'wb').write(fat(macho(1)))
+EOP
+  enc=$("$TMP/ms-e" -e "$TMP/encdir" 2>/dev/null | sed "s#$TMP/encdir/##" | sort | tr '\n' ' ')
+  if [ "$enc" = "crypt crypt-fat " ]; then
+    ok "machoscan -e 只报告加密二进制（含 Fat 首选 slice）"
+  else
+    bad "machoscan -e 输出异常: $enc"
+  fi
+  all=$("$TMP/ms-e" "$TMP/encdir" 2>/dev/null | wc -l | tr -d ' ')
+  [ "$all" = "3" ] && ok "machoscan 普通模式仍列出全部 Mach-O" || bad "普通模式回归: $all"
+else
+  ok "跳过 machoscan -e（无 cc/python3）"
+fi
+
 # ---------------------------------------------------------------- 6. Mach-O 解析
 group "Mach-O 解析"
 SDK=/Applications/Xcode.app/Contents/Developer/Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS.sdk

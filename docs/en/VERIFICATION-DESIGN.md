@@ -209,7 +209,7 @@ Stage 1 is implemented as a repeatable host-side gate [`tests/stage1/run.sh`](..
 | OS | `tvOS 17.0 (21J354)` |
 | uptime before the experiment | 124 days (continuous during the experiment; no reboot) |
 | trustcache before the experiment | 587 / 740 |
-| Production baseline | `tsltv verify` 7/7 `PASS`; `installed.tsv` sha256 `51f98000…` |
+| Production baseline | `tsltv verify` 7/7 `PASS`; `installed.tsv` sha256 `<baseline-sha256>` |
 | Test subject | `com.tsltv.verify.probe`; the main binary inside the container matched the source hash |
 
 ### 9.2 Results by Sub-item
@@ -248,7 +248,7 @@ Therefore, in the jailbroken state there is **no "clean, no-trustcache" baseline
 - `killall VerifyProbe`: no process.
 - `tsverify cleanup`: `unregister=1 deleted=1`; `tsverify query`: `installed=0 type=(nil) path=(nil)`.
 - The app container and data container were deleted; `/var/tmp/tsltv-verify-*` was deleted; `uicache -l` has no `tsltv.verify` registration.
-- `tsltv verify`: 7/7 `PASS`; `installed.tsv` sha256 `51f98000c231828894ba313189c6344606f5f781d264a6f3c0ae5e72e2a3677e`, identical to the pre-experiment value.
+- `tsltv verify`: 7/7 `PASS`; `installed.tsv` sha256 `<baseline-sha256>`, identical to the pre-experiment value.
 - uptime 124 days 10:53; no reboot.
 - trustcache 599/740: the test cdhash is inert residue whose files were deleted and which can no longer execute; it clears naturally on the next reboot.
 
