@@ -25,6 +25,8 @@ ATV_PASS='<设备sudo密码>' ./scripts/accept.sh 192.168.1.23     # 七步，�
 | Mach-O 解析 | 现场编一个 tvOS 二进制，断言 `platform=3 minos=17.0 cryptid=0` |
 | demo ipa | 构建后检查 `Payload/TSLTVDemo.app` 结构、图标 `Assets.car`、`CFBundleExecutable` 与"确实未签名" |
 | 卸载来源 | CLI `uninstall` 拒绝卸载 `origin=adopt`，允许卸载 `origin=install` |
+| 退出码透传 | `tsh` 对 171 / 179 / 180 / 181 / 184 原样透传 |
+| tsreg 构建 | tvOS 交叉编译 + Mach-O 元数据（platform=3 / minos=17.0 / cryptid=0） |
 | mod 注入 | `modinject` 写入 `LC_LOAD_DYLIB`（ncmds +1），`machoscan` 精准识别 Mach-O 并映射前缀 |
 | Stage 1 闸门 | `tests/stage1/run.sh`：交叉编译 CLI/UIKit 两个 tvOS 最小单元，校验 arm64 / platform=3 / minOS 17.0 / cryptid=0 / Info.plist / entitlements（零设备接触） |
 

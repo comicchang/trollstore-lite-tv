@@ -15,9 +15,10 @@
 #   tsh registration <bundle-id> [System|User]
 #   tsh trust-retrust
 #
-# 退出码与 TrollStore 对齐：0 成功；非 0 失败（具体码见下方映射）。
+# 退出码与 TrollStore 对齐（原样透传 tsltv）：0 成功 / 171 已存在且非本工具安装 /
+# 180 主程序加密 / 181 注册失败 / 184 嵌套二进制加密（非致命，安装已完成）。
 
-AT=/usr/libexec/tsltv/tsltv
+AT=${TSLTV_BIN:-/usr/libexec/tsltv/tsltv}
 RUN_AS=""
 
 say() { printf '%s\n' "$*"; }
@@ -46,10 +47,9 @@ case "$cmd" in
     # 记录调用方式，便于对照 TrollStore 的行为
     say "[tsh] TrollStore 兼容安装 (args:${RUN_AS:- default})"
     "$AT" install "$src"
-    rc=$?
-    # TrollStore: 171 = 可恢复错误（可 force 重试）；这里把失败映射为 1
-    [ "$rc" -eq 0 ] || exit 1
-    exit 0
+    # 与 TrollStore RootHelper 对齐：0 成功；171 可 force 重试；180/181 致命；
+    # 184 = 安装成功但包内含加密的嵌套二进制（非致命）。全部原样透传。
+    exit $?
     ;;
 
   uninstall)

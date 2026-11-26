@@ -44,7 +44,7 @@
 | **G1** | **代码信任机制** | `ldid` ad-hoc 双哈希 + `jbctl trustcache add`（依赖越狱） | **CoreTrust 2（CVE-2023-41991）** 双签名者 CMS 伪造（`ChOma` + `fastPathSign`），仅限 tvOS ≤ 17.0 | **核心 Gap（高）**：需实证 `AppleTV14,1` tvOS 17.0 未越狱态内核是否放行 |
 | **G2** | **特权执行引擎（RootHelper）** | Shell 脚本 `tsltv` + `tsltvd`（依赖 Procursus `ldid`/`uicache`/`unzip`/`plutil` 与 `$JB`） | **单文件自包含原生 arm64 `RootHelper`**（静态/内嵌 `ChOma` + `fastPathSign` + `libarchive` + `OpenSSL` + `LSApplicationWorkspace`，经 CoreTrust 签名） | **工程 Gap（中-高）**：未越狱重启后所有越狱工具链都不存在，必须零外部 shell 依赖 |
 | **G3** | **App 提权拉起机制** | FIFO（`/var/run/tsltv/req.fifo`）交给 root LaunchDaemon `tsltvd` | App 携带 `com.apple.private.persona-mgmt`，直接 `posix_spawn` + `posix_spawnattr_set_persona_uid_np(0)` 拉起 `RootHelper` | **工程 Gap（中）**：未越狱态没有越狱 LaunchDaemon；需用 patched SDK / `dlsym` 调用 `posix_spawn` |
-| **G4** | **容器与注册** | 放进 `$JB/Applications/*.app` + Procursus `uicache -p` | 经 `MCMAppContainer` 部署到原生 `/var/containers/Bundle/Application/<UUID>`，调用 `LSApplicationWorkspace` 注册为 `System`（携带 `MobileInstallationHelperService` 等完整 entitlements） | **工程 Gap（中）**：需在未越狱态实测 `MCMAppContainer` 与 `LSApplicationWorkspace` 行为 |
+| **G4** | **容器与注册** | app 本体仍在 `$JB/Applications`；注册已改由 `tsreg` 完成：MCM 数据/插件/App Group 容器 + `LSApplicationWorkspace` System 字典（Entitlements / 插件表 / 容器化字段） | 经 `MCMAppContainer` 部署到原生 `/var/containers/Bundle/Application/<UUID>` 并注册为 `System` | **注册已对齐（2026-11-26）**；剩余差异：app 本体未迁入 MCMAppContainer，未越狱态未验证 |
 | **G5** | **Persistence Helper（图标缓存自救）** | 无须寄生（重启后由 Relaxin 越狱 + `retrust` 恢复） | 系统重建图标缓存后所有 CoreTrust App 会退回 `User` 态打不开，需把 `PersistenceHelper` 寄生到某个 tvOS 系统 App 中，未越狱态一键 `Refresh App Registrations` | **高风险 Gap（高）**：tvOS 17.0 无 USB 救砖且不可降级，替换系统 App 必须严格备份与验证 |
 | **G6** | **首次安装引导（Bootstrap）** | 通过 `dpkg -i`（已有 Relaxin 越狱） | 未越狱设备需 kernel/installd 漏洞首装；**但我们已有 Relaxin 越狱，可直接由 Relaxin 完成首装，装完后脱离越狱永久运行** | **已就绪（零 Gap）** |
 | **G7** | **前端 UI 与生态** | 已有成熟 TV UI + 39 ms 网页商店 `:8787` + 实时进度上传 + 油猴托管 | 可**直接复用**（仅把底层调用从 `ATRun()` FIFO 切为双后端：CoreTrust 模式走 `spawnRoot`，越狱模式走 FIFO） | **已就绪（复用优势）** |
@@ -114,6 +114,16 @@
 - **结论（直接影响 G5 架构）**：
   - 在正常重启（未触发系统全量图标缓存重建）场景下，CoreTrust 签名的 `System` App 仍可免越狱直接启动；
   - 但一旦触发全量图标缓存重建，tvOS 17.0 上**没有安全的 iOS `Tips` 式免越狱 Persistence Helper 寄生位**，此时需要重新跑一次 Relaxin 越狱（或通过 Relaxin 恢复注册）。这大幅降低了动系统 App 的诱因与变砖风险。
+
+### 5.4 对齐进展（2026-11-26，Lite 主线）
+
+| 维度 | 状态 |
+|---|---|
+| 签名/entitlements、嵌套清理、加密检测、权限、覆盖与回滚 | ✅ 已对齐上游 Lite 语义 |
+| 原生注册（MCM 容器 + LS System + Entitlements/插件/App Group） | ✅ 已落地 `tsreg`（洁净室实现，纯 MIT） |
+| Info.plist 补丁 + 171/180/181/184 退出码（tsh 透传） | ✅ 已实现 |
+| CoreTrust（G1） | ⛔ 不在本仓：非 Lite 路线已在 `comicchang/trollstore-tv` 与 `comicchang/trollstore-tv-tools` 完成并冷重启实证，两条线永久分离 |
+| app 容器位置（G4 剩余） | ⚠️ 仍为 jbroot `/Applications`；refresh 不迁移旧 uicache 应用 |
 
 ---
 

@@ -12,7 +12,7 @@ execute the binary exactly as it does a legitimate app.
 So the whole approach is three things:
 
 ```
-ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   →   uicache -p <app>
+ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   →   tsreg register <app>
 ```
 
 ### Three hard requirements (miss one and the process exits silently, with zero logs)
@@ -46,11 +46,12 @@ ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   → 
           │     root, launchd, serial     │
           └───────────────┬───────────────┘
                           ▼
-   ldid · jbctl trustcache · uicache · /Applications · installed.tsv
+   ldid · jbctl trustcache · tsreg (MCM containers + LaunchServices) · /Applications · installed.tsv
 ```
 
 | Component | Language | Responsibility |
 |---|---|---|
+| `src/tools/tsreg.m` | ObjC | Native registration: MCM app-data / plugin / App Group containers + `LSApplicationWorkspace` register/unregister + Info.plist patches |
 | `src/cli/tsltv` | POSIX sh | All business logic: unpack, precheck, sign, trust, register, record |
 | `src/daemon/tsltvd` | POSIX sh | Resident engine: take commands from the FIFO, execute, write results back |
 | `src/web/main.m` | ObjC | Web store (HTTP server + built-in pages) |
@@ -111,13 +112,15 @@ serial shell). Hence:
      - cryptid != 0  → reject (encrypted bundle)
      - platform = 2  → warn (iOS bundle)
      - minos > 17.0  → warn (OS version too new)
-4. Copy to /Applications/<Name>.app; recursively remove SC_Info / _CodeSignature from the main bundle and nested appex/frameworks
+4. Copy to /Applications/<Name>.app; recursively remove SC_Info / _CodeSignature from the main bundle and nested appex/frameworks; apply upstream-style Info.plist patches (SBAppUsesLocalNotifications=1, strip URL schemes claimed by real system apps)
 5. Read each bundle's original entitlements and normalize container fields (fallback to TROLLTROLL.* only when the main app has none; Lite writes pmap_cs)
 6. Walk every Mach-O (main executable + Frameworks + PlugIns + appex):
      each bundle main executable is re-signed with its own entitlements; all other binaries use
-     ldid -s merge signing (preserving existing entitlements) → jbctl trustcache add
-7. Align permissions (owner 33:33; files 0644, directories and Mach-Os 0755) → register with uicache -p
-8. Write installed.tsv
+     ldid -s merge signing (preserving existing entitlements) -> jbctl trustcache add
+7. Align permissions (owner 33:33; files 0644, directories and Mach-Os 0755) -> tsreg register:
+     MCM app-data container + LS dictionary (Entitlements / plugin table / App Groups / containerization), System by default
+8. Write installed.tsv and drop a `.tsltv-tsreg` marker inside the app
+     (refresh / mods use it so apps installed by the old uicache path are never container-migrated)
 ```
 
 Path blacklist: `jbctl trustcache add` silently rejects paths under

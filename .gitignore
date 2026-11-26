@@ -22,6 +22,7 @@ src/tools/machocheck
 src/tools/modinject
 src/tools/machoscan
 src/tools/entfix
+src/tools/tsreg
 src/gui/TrollStoreLiteTV.app/
 examples/hello-tvos/.build/
 dist/*.deb

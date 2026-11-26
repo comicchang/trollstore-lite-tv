@@ -18,10 +18,10 @@ BIN=/usr/libexec/tsltv
 APP=/Applications/TrollStoreLiteTV.app
 ENT=/var/tmp/trollstore-lite-tv.ent
 TRUST_TMP=/var/tmp/trollstore-lite-tv.trustbin
-trap 'rm -f "$ENT" "$ENT.one" "$TRUST_TMP"' 0
+trap 'rm -f "$ENT" "$ENT.one" "$ENT.reg" "$TRUST_TMP"' 0
 
 chmod 755 "$BIN/tsltv" "$BIN/tsltvd" "$BIN/tsltvweb" "$BIN/retrust.sh" \
-  "$BIN/tsh" "$BIN/wake" "$BIN/modinject" "$BIN/machoscan" "$BIN/entfix"
+  "$BIN/tsh" "$BIN/wake" "$BIN/modinject" "$BIN/machoscan" "$BIN/entfix" "$BIN/tsreg"
 
 cat > "$ENT" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -35,12 +35,48 @@ cat > "$ENT" <<'EOF'
 </dict></plist>
 EOF
 
+# tsreg 需要容器管理与 LaunchServices 私有 API 权限（对齐 upstream RootHelper entitlements.plist）
+cat > "$ENT.reg" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>platform-application</key><true/>
+<key>com.apple.private.security.no-sandbox</key><true/>
+<key>com.apple.private.security.container-required</key><false/>
+<key>com.apple.private.security.container-manager</key><true/>
+<key>com.apple.private.MobileContainerManager.allowed</key><true/>
+<key>com.apple.private.coreservices.canmaplsdatabase</key><true/>
+<key>com.apple.lsapplicationworkspace.rebuildappdatabases</key><true/>
+<key>com.apple.private.security.storage.AppBundles</key><true/>
+<key>com.apple.private.security.storage.MobileDocuments</key><true/>
+<key>com.apple.private.security.storage-exempt.heritable</key><true/>
+<key>com.apple.private.MobileInstallationHelperService.InstallDaemonOpsEnabled</key><true/>
+<key>com.apple.private.MobileInstallationHelperService.allowed</key><true/>
+<key>com.apple.private.uninstall.deletion</key><true/>
+<key>com.apple.springboard.launchapplications</key><true/>
+<key>com.apple.backboardd.launchapplications</key><true/>
+<key>com.apple.frontboard.launchapplications</key><true/>
+<key>com.apple.multitasking.termination</key><true/>
+<key>com.apple.private.mobileinstall.allowedSPI</key>
+<array>
+<string>InstallForLaunchServices</string>
+<string>Install</string>
+<string>UninstallForLaunchServices</string>
+<string>Uninstall</string>
+<string>UpdatePlaceholderMetadata</string>
+</array>
+<key>com.apple.frontboard.shutdown</key><true/>
+<key>com.apple.runningboard.process-state</key><true/>
+</dict></plist>
+EOF
+
 sign_and_trust() {
   file=$1
   appid=$2
+  entplist=${3:-$ENT}
   [ -f "$file" ] || { echo "签名组件不存在: $file" >&2; return 1; }
   sed "s|<dict>|<dict><key>application-identifier</key><string>$appid</string>|" \
-    "$ENT" > "$ENT.one" || { echo "生成 entitlement 失败: $file" >&2; return 1; }
+    "$entplist" > "$ENT.one" || { echo "生成 entitlement 失败: $file" >&2; return 1; }
   "$LDID" -S"$ENT.one" -Cadhoc -Hsha1 -Hsha256 "$file" || {
     echo "签名失败: $file" >&2
     return 1
@@ -70,6 +106,7 @@ sign_and_trust "$BIN/wake" com.trollstorelite.tv.wake
 sign_and_trust "$BIN/modinject" com.trollstorelite.tv.modinject
 sign_and_trust "$BIN/machoscan" com.trollstorelite.tv.machoscan
 sign_and_trust "$BIN/entfix" com.trollstorelite.tv.entfix
+sign_and_trust "$BIN/tsreg" com.trollstorelite.tv.tsreg "$ENT.reg"
 sign_and_trust "$APP/TrollStoreLiteTV" com.trollstorelite.tv
 
 # 若记账清单里已有 TrollStoreLiteTV，同步更新重签后的 cdhash，避免首页误报信任异常

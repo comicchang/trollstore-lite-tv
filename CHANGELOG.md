@@ -12,7 +12,13 @@
 - **嵌套加密二进制检测**：`machoscan -e` 按上游 Lite 语义扫描全部 Mach-O（Fat 取 arm64 首选 slice）；主程序加密致命，其余仅告警。
 - **安装护栏与权限**：目标已存在且非本工具安装时拒绝覆盖；签名/信任失败自动回滚；安装后按上游 `fixPermissionsOfAppBundle` 设为 `33:33` 属主、文件 `0644`、目录与 Mach-O `0755`。
 - **`tsltv verify` 去掉自造门槛**：不再要求 `get-task-allow`，改以「信任缓存命中 + ad-hoc 签名 + 已注册」为通过判据。
-- 测试新增 entfix 规则（回落/容器/字符串容器/布尔 false/非 dict 拒绝）与 `machoscan -e`（thin + Fat）覆盖，共 57 条全过。
+- **新增 `tsreg` 工具（洁净室原创，纯 MIT）**：MCM 数据 / 插件 / App Group 容器 + `LSApplicationWorkspace` System 注册与注销（App Group 引用计数保护）。运行时 `dlopen` + `NSClassFromString`，不使用 `-undefined dynamic_lookup`，不复制上游 BSD-4-Clause 的 `uicache.m`。
+- **安装流程改用 `tsreg`**：复制后先按上游 `applyPatchesToInfoDictionary` 打 Info.plist 补丁（`SBAppUsesLocalNotifications`、剥离真正系统应用占用的 URL scheme），签名/信任/权限后原生注册，并在 app 内写 `.tsltv-tsreg` 标记。`refresh` / `mods` 只对带标记的新装应用走 `tsreg`，旧 uicache 应用保持原注册与数据，不迁移容器。
+- **卸载**：`tsreg unregister` 删除数据容器、插件容器与不再被引用的 App Group，再注销 LaunchServices。
+- **退出码对齐**：171（已存在且非本工具安装）/ 179（系统应用 Bundle ID）/ 180（主程序加密）/ 181（注册失败）/ 184（嵌套二进制加密，非致命）；`tsh` 原样透传，`inbox-install` 与网页上传把 184 视为安装成功。
+- **系统应用守卫**：只认密封卷 `/rootfs/Applications`、`/System/Applications`（含 jbroot 内 `<jbroot>/rootfs/Applications`）与 `installed.tsv`；RootHide 下 `/Applications` 的自装应用不会再被误判为不可变系统应用。新增只读 `tsreg classify` 便于复核。
+- **真机隔离探针复验（Stage 2E）**：TSLTVDemo 经新链路安装 → 容器/System 注册 → FrontBoard 拉起（进程存活）→ 卸载清理全部通过；生产 `tsltv verify` 7/7、`installed.tsv` sha256 不变。截屏因电视屏幕关闭（全黑）未取得，留待电视开启时补拍。
+- 测试新增 tsh 退出码透传与 `tsreg` 交叉编译覆盖，共 62 条全过。
 
 ## 2.1.6 — 2026-11-25
 

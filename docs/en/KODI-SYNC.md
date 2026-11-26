@@ -23,7 +23,7 @@ This guide documents a unified **Kodi 21 (Omega)** multi-device setup (Apple TV 
 flowchart LR
     NAS["NAS / Media Server (&lt;NAS-IP&gt;)<br/>Samba SMB2/3 + MariaDB 3306<br/>SSOT Config Hub: /data/KODI/sync/"]
     DB[("MariaDB<br/>KodiVideos131 / KodiMusic83<br/>Library + Search + Resume")]
-    SMB["Samba Shares<br/>Movie / TV / Amine / Music / Downloads"]
+    SMB["Samba Shares<br/>Movies / TV / Anime / Music / Downloads"]
     ATV["Apple TV 4K (tvOS)<br/>Kodi 21.3"]
     TV["Android TV (Sony, etc.)<br/>Kodi 21.3"]
     NEW["Future Devices<br/>macOS / Windows / Linux / Steam Deck"]

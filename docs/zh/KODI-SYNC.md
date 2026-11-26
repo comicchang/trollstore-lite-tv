@@ -23,7 +23,7 @@
 flowchart LR
     NAS["NAS / 媒体服务器 (&lt;NAS-IP&gt;)<br/>Samba SMB2/3 + MariaDB 3306<br/>SSOT 配置真源: /data/KODI/sync/"]
     DB[("MariaDB<br/>KodiVideos131 / KodiMusic83<br/>片库 + 搜索 + 观看进度")]
-    SMB["Samba 共享<br/>Movie / TV / Amine / Music / Downloads"]
+    SMB["Samba 共享<br/>Movies / TV / Anime / Music / Downloads"]
     ATV["Apple TV 4K (tvOS)<br/>Kodi 21.3"]
     TV["Android TV (Sony 等)<br/>Kodi 21.3"]
     NEW["未来新设备<br/>macOS / Windows / Linux / Steam Deck"]

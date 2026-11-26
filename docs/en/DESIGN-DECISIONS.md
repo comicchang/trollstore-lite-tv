@@ -43,7 +43,7 @@ Three hard requirements (fail any one and the process exits silently, with zero 
                 │      tsltv      │  pure POSIX sh, no python/jq dependency
                 └────────┬────────┘
                          ▼
-   ldid · jbctl trustcache · uicache · /Applications
+   ldid · jbctl trustcache · tsreg · /Applications
 ```
 
 State file `/usr/libexec/tsltv/installed.tsv`:
@@ -75,10 +75,27 @@ metacharacters rejected, no `eval`.
 | Idea | Measured conclusion |
 |---|---|
 | Port the original TrollStore | **Not viable.** The whole thing rests on CoreTrust (CVE-2023-41991) + a forged certificate; on tvOS 17.0 that bypass forges successfully but `CS_INVALID_ALLOWED` is never set. Under the same bypass, a build with correct entitlements still won't start, while plain adhoc does |
-| TrollStore **Lite** | **Equally not viable.** It is the same source tree compiled with `-DTROLLSTORE_LITE` (MIT licensed), changing only "register as User/System by default" and hiding settings; the core is still CoreTrust, and it depends on `MCMAppContainer`, which does not exist on tvOS. The entire upstream repo contains zero references to the trust cache |
-| Writing to the read-only system volume | **Not needed.** `/rootfs` is EROFS, but `uicache` can already register an app as `Type: System`, which is indistinguishable from the user's point of view |
+| TrollStore **Lite** | **Registration/container APIs work; the CoreTrust path does not.** Lite is the same source tree built with `-DTROLLSTORE_LITE` (MIT), and its core is still CoreTrust. However `MCMAppContainer` / `MCMAppDataContainer` and `LSApplicationWorkspace` do exist and work on tvOS 17.0 (Stage 2B); `tsreg` now uses them for native registration |
+| Writing to the read-only system volume | **Not needed.** `/rootfs` is EROFS; `tsreg` registers apps as `Type: System` through `LSApplicationWorkspace` without touching the system volume |
 | Installing an encrypted App Store bundle | **Impossible.** `cryptid 1` gives `Killed: 9` at launch; FairPlay decryption would be required. We now **reject before installing** and explain why |
 | Validating "will it run" by direct exec | **Invalid.** A UIKit app necessarily dies outside a FrontBoard context; occasional survival is a momentary illusion |
+
+---
+
+### 4.1 Registration and containers (since 2026-11-26)
+
+- Installs and updates go through `tsreg`: MCM app-data / plugin / App Group containers plus
+  `LSApplicationWorkspace` registration as System, carrying Entitlements, the plugin table and the
+  containerization fields. Uninstalls go through `tsreg unregister` (App Group containers are
+  reference-counted).
+- `tsreg` is a clean-room implementation (runtime `dlopen` + `NSClassFromString`, no
+  `-undefined dynamic_lookup`) and does not copy the upstream BSD-4-Clause `uicache.m`, so the
+  repository stays pure MIT.
+- System-app detection only trusts the sealed volume (`/rootfs/Applications`,
+  `/System/Applications`, including `<jbroot>/rootfs/Applications`) and `installed.tsv`.
+  Under RootHide, self-installed apps under `/Applications` are never treated as system apps.
+- `refresh` / `mods` use `tsreg` only for new installs carrying the `.tsltv-tsreg` marker; apps
+  installed by the old `uicache` path keep their original registration, containers and data.
 
 ---
 

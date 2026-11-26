@@ -34,13 +34,27 @@ static BOOL SaveSurface(IOSurfaceRef surf, const char *outPath, size_t *nonZeroO
     CGImageRef img = CGImageCreate(width, height, 8, 32, bpr, cs,
                                    kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst,
                                    prov, NULL, false, kCGRenderingIntentDefault);
-    NSURL *url = [NSURL fileURLWithPath:[NSString stringWithUTF8String:outPath]];
-    CGImageDestinationRef dst = CGImageDestinationCreateWithURL(
-        (__bridge CFURLRef)url, CFSTR("public.png"), 1, NULL);
+    NSMutableData *png = [NSMutableData data];
+    CGImageDestinationRef dst = CGImageDestinationCreateWithData(
+        (__bridge CFMutableDataRef)png, CFSTR("public.png"), 1, NULL);
     BOOL ok = NO;
     if (dst && img) {
         CGImageDestinationAddImage(dst, img, NULL);
         ok = CGImageDestinationFinalize(dst);
+        if (ok) {
+            if (strcmp(outPath, "-") == 0) {
+                // 走 shell 重定向：信任缓存下的 ad-hoc 进程写绝对路径会被 vroot/沙箱拒绝
+                fwrite(png.bytes, 1, png.length, stdout);
+                fflush(stdout);
+            } else {
+                ok = [png writeToFile:[NSString stringWithUTF8String:outPath] atomically:YES];
+            }
+        }
+    } else {
+        fprintf(stderr, "image encode unavailable dst=%p img=%p\n", dst, img);
+    }
+    if (!ok) {
+        fprintf(stderr, "png encode failed (bytes=%lu)\n", (unsigned long)png.length);
     }
     if (dst) CFRelease(dst);
     if (img) CGImageRelease(img);

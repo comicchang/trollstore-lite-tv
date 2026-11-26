@@ -43,7 +43,7 @@ Inspecting [`straight-tamago/TrollStore-tvOS`](https://github.com/straight-tamag
 | **G1** | **Code trust mechanism** | `ldid` ad-hoc dual-hash + `jbctl trustcache add` (requires jailbreak) | **CoreTrust 2 (CVE-2023-41991)** multi-signer CMS bypass (`ChOma` + `fastPathSign`), tvOS ≤ 17.0 only | **Primary Gap (High)**: must prove `AppleTV14,1` tvOS 17.0 unjailbroken kernel accepts it |
 | **G2** | **Privileged engine (`RootHelper`)** | Shell `tsltv` + `tsltvd` (depends on Procursus `ldid`/`uicache`/`unzip` and `$JB`) | **Self-contained native arm64 `RootHelper`** embedding `ChOma` + `fastPathSign` + `libarchive` + `OpenSSL` + `LSApplicationWorkspace`, CoreTrust-signed | **Engineering Gap (Med-High)**: zero jailbreak tools exist after a jailed reboot |
 | **G3** | **Root invocation from UI** | FIFO (`/var/run/tsltv/req.fifo`) served by LaunchDaemon `tsltvd` | App holds `com.apple.private.persona-mgmt` and calls `posix_spawn` + `posix_spawnattr_set_persona_uid_np(0)` | **Engineering Gap (Medium)**: requires patched SDK / `dlsym` |
-| **G4** | **App container & registration** | `$JB/Applications/*.app` + Procursus `uicache -p` | Native `/var/containers/Bundle/Application/<UUID>` via `MCMAppContainer` + `LSApplicationWorkspace` `System` registration | **Engineering Gap (Medium)**: must be verified in jailed state without roothide vroot |
+| **G4** | **App container & registration** | App bundle still lives in `$JB/Applications`; registration now goes through `tsreg`: MCM app-data / plugin / App Group containers + a `LSApplicationWorkspace` System dictionary (Entitlements / plugin table / containerization fields) | Deploy via `MCMAppContainer` into native `/var/containers/Bundle/Application/<UUID>` and register as `System` | **Registration aligned (2026-11-26)**; remaining delta: the app bundle is not moved into an MCMAppContainer, and the jailed state is still unverified |
 | **G5** | **Persistence Helper** | Not needed (Relaxin + `retrust` restores trust) | Icon cache reloads revert CoreTrust apps to `User` (unlaunchable); requires installing a Persistence Helper into a tvOS system app to re-register as `System` while jailed | **High-Risk Gap (High)**: `AppleTV14,1` has no USB restore port and 17.0 cannot be downgraded |
 | **G6** | **Initial bootstrap** | `dpkg -i` via Relaxin | Normally needs an install exploit; **already solved for us because Relaxin can bootstrap it once, then it persists jailed** | **Ready (Zero Gap)** |
 | **G7** | **Frontend & ecosystem** | Mature TV UI + 39 ms web store `:8787` + live upload progress + userscript host | **Directly reusable** via a dual-backend engine abstraction (CoreTrust `spawnRoot` vs jailbreak FIFO) | **Ready (Reuse advantage)** |
@@ -105,6 +105,18 @@ A read-only host and on-device runtime rehearsal was completed on Apple Silicon 
 
 Enumerating `/var/containers/Bundle/Application/*/*.app` vs `/rootfs/Applications/*.app` confirmed that **all built-in Apple apps on tvOS 17.0 (`21J354`) live on the sealed read-only `/rootfs/Applications/` volume** (the only Apple app in writable `/var/containers/Bundle/Application/` is App Store `TestFlight.app`, which is `Type: User`).
 - **Implication for G5**: Unlike iOS (`Tips`), tvOS 17.0 has **no removable `System` app** to host a jailed Persistence Helper. Normal reboots preserve CoreTrust `System` registrations, while an icon-cache rebuild falls back to running Relaxin once to re-register — avoiding risky system-app modifications altogether.
+
+---
+
+### 5.4 Alignment progress (2026-11-26, Lite line)
+
+| Area | Status |
+|---|---|
+| Signing/entitlements, nested cleanup, encryption checks, permissions, overwrite guard and rollback | ✅ Aligned with upstream Lite semantics |
+| Native registration (MCM containers + LS System + Entitlements/plugins/App Groups) | ✅ Implemented as `tsreg` (clean-room, pure MIT) |
+| Info.plist patches + 171/180/181/184 exit codes (passed through by `tsh`) | ✅ Implemented |
+| CoreTrust (G1) | ⛔ Not in this repo: the non-Lite line is complete in `comicchang/trollstore-tv` and `comicchang/trollstore-tv-tools` with cold-reboot evidence; the two lines stay permanently separate |
+| App container location (remaining G4 delta) | ⚠️ Still jbroot `/Applications`; refresh never migrates apps installed by the old uicache path |
 
 ---
 

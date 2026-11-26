@@ -26,12 +26,12 @@ To avoid rewriting the front end each time a different underlying mechanism is v
 
 ```mermaid
 flowchart TD
-    UI["TV 原生界面 (TrollStoreLiteTV.app)"] --> API["统一动作协议层 (install / uninstall / list / verify / refresh)"]
-    WEB["网页商店 (:8787 + 油猴脚本托管)"] --> API
-    CLI["命令行 (tsltv / tsh)"] --> API
+    UI["Native TV UI (TrollStoreLiteTV.app)"] --> API["Unified Action Layer (install / uninstall / list / verify / refresh)"]
+    WEB["Web Store (:8787 + Userscript Host)"] --> API
+    CLI["CLI (tsltv / tsh)"] --> API
 
-    API --> B1["后端 A：越狱信任缓存后端（现网稳定）\nFIFO -> tsltvd -> ldid + jbctl trustcache + uicache"]
-    API --> B2["后端 B：自包含原生后端（待验证）\n独立 Helper 进程 -> 原生容器 API + LSApplicationWorkspace"]
+    API --> B1["Backend A: Jailbreak Trustcache (Production Stable)<br/>FIFO -&gt; tsltvd -&gt; ldid + jbctl trustcache + uicache"]
+    API --> B2["Backend B: Self-Contained Native Backend (Separate Repo)<br/>Standalone Helper -&gt; Native Container API + LSApplicationWorkspace"]
 ```
 
 ### Interface Contract (backend-agnostic)
@@ -66,12 +66,12 @@ The three stages proceed in order of **risk from zero upward and cost from small
 
 ```mermaid
 flowchart LR
-    S1["Stage 1\n宿主机侧构建与静态校验\n(零设备接触)"] -->|全部 PASS| S2["Stage 2\n设备端隔离运行态验证\n(不重启 / 零系统改动)"]
-    S2 -->|全部 PASS| S3["Stage 3\n冷重启持久化状态验证\n(正常重启 1 次)"]
-    S1 -->|FAIL| STOP["止损 / 修复构建链"]
-    S2 -->|FAIL| CLEAN["清理测试单元\n维持现网 Lite 方案"]
+    S1["Stage 1<br/>Host Build &amp; Static Checks<br/>(Zero Device Touch)"] -->|All PASS| S2["Stage 2<br/>Isolated On-Device Runtime<br/>(No Reboot / Zero SSV Writes)"]
+    S2 -->|All PASS| S3["Stage 3<br/>Cold-Reboot Persistence<br/>(Single Clean Reboot)"]
+    S1 -->|FAIL| STOP["Stop &amp; Fix Build Chain"]
+    S2 -->|FAIL| CLEAN["Clean Test Unit<br/>Keep Production Lite"]
     S3 -->|FAIL| CLEAN
-    S3 -->|PASS| NEXT["进入完整双后端工程实施"]
+    S3 -->|PASS| NEXT["Proceed to Full Implementation"]
 ```
 
 ### Stage 1: Host-Side Build and Static Metadata Verification (zero device risk)
@@ -258,3 +258,44 @@ Therefore, in the jailbroken state there is **no "clean, no-trustcache" baseline
 - 2B proves that "native container + LS System registration" is feasible in the current environment; 2C proves that "registration success ≠ FrontBoard will launch", so the full native-backend chain is not closed.
 - Known evidence gaps: the screenshot PNG was not retained; the POSIX ownership of the container/`.app` was not measured; `uicache -p`'s internal registration fields are not in this repository. Any follow-up test (including a single read-only log capture) must be re-declared and authorized.
 - Production strategy is unchanged: keep using the `TrollStore Lite TV v2.1.6` jailbreak trustcache backend; cold-reboot Stage 3 is out of scope for this experiment.
+
+---
+
+## 10. Stage 2E: Registration Backend Alignment Re-Verification (2026-11-26, Isolated Probes)
+
+> Verdict: **the native registration chain closed the loop on-device** (install → containers/registration → FrontBoard launch → uninstall cleanup); no reboot, no production app or `installed.tsv` touched. Uptime stayed continuous (3h44m at session start; not restarted by this experiment).
+
+### 10.1 Baseline
+
+| Field | Value |
+|---|---|
+| Device / OS | `AppleTV14,1` · tvOS 17.0 (`21J354`) |
+| Production baseline | `tsltv verify` 7/7 `PASS`; `installed.tsv` sha256 `51f98000c231828894ba313189c6344606f5f781d264a6f3c0ae5e72e2a3677e` (identical before and after) |
+| Test units | `com.example.tsltv.demo` (`TSLTVDemo.app`) and `com.tsltv.verify.probe` |
+| Tooling | Repository `tsltv` + `tsreg` under `/var/tmp/tsltv-verify` only, with a private `installed.tsv` |
+
+### 10.2 Results
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| Install + native registration | `PASS` | `REGISTER bid=com.example.tsltv.demo ok=1 type=System`; MCM data container created; `tsreg query` reports `containerized=1` and a `data_container=/private/var/mobile/Containers/Data/Application/…` |
+| Info.plist patches | `PASS` | After install, `plutil -key SBAppUsesLocalNotifications` → `1` |
+| FrontBoard launch | `PASS` | After `uiopen --bundleid com.example.tsltv.demo`, the process stayed alive: `/…/Applications/TSLTVDemo.app/TSLTVDemo` (pid 3765), no `.ips` |
+| Uninstall cleanup | `PASS` | `tsreg unregister` → `ok=1`; LS entry gone, data container deleted, app directory deleted, private `installed.tsv` empty |
+| 171 guard | `PASS` | Pre-creating a same-name directory not installed by this tool → install exits `171` without writing |
+| 179 system-app refusal | `PASS` | `tsltv install /rootfs/Applications/AppleTV.app` → `rc=179`, nothing written |
+| System-app guard | `PASS` after fix | The first classifier saw `<jbroot>/rootfs/Applications/AppleTV.app` as non-system under RootHide (`system=0`), so the negative test re-registered the system Apple TV app (10.3); after the fix the read-only `tsreg classify` returns `system_path=1` for that path and `system_path=0 managed=1` for `/Applications/YouTubeTVL.app` |
+| Production regression | `PASS` | `tsltv verify` 7/7; `installed.tsv` sha256 unchanged; no test residue in `/Applications`; test directory removed |
+
+### 10.3 Incident and boundaries (recorded as-is)
+
+- **System app re-registered**: the negative test (expecting rc=3) actually re-registered the system app `com.apple.TVWatchList` (Apple TV). Its data container is the pre-existing 2022 container (`854E3CF3…`, containing `com.apple.AppleMediaServices` and other data); it was neither deleted nor recreated, and the app launches. The new registration is `Type: System`, `Containerized: true`, matching sibling system apps; the `Removable` flag is true (the original value cannot be confirmed). No second write was made, to avoid widening the risk.
+- **Root cause**: under RootHide the `tsreg` process sees `/rootfs` mapped to `<jbroot>/rootfs`, and the old check returned "not system" as soon as it saw `.jbroot-`. It now recognizes `<jbroot>/rootfs/Applications` and `/System/Applications` path segments, and a read-only `tsreg classify` verb was added for future verification.
+- **Screenshot evidence gap**: the TV display was off/black at the time (`nonBlackSamples=0`, the PNG was fully black), so no UI screenshot is available; this round relies on process liveness plus registration queries. Separately, a trustcache ad-hoc process cannot write absolute paths under the vroot, so `shot` now emits the PNG on stdout and the shell redirects it to disk.
+- **Residue**: trustcache 280/740; all test cdhashes are inert (their files were deleted) and clear on the next reboot.
+- **2C revision**: the §9.5 probe launch failure was caused by the probe app's own metadata (missing `LSRequiresIPhoneOS`, etc.), not by a registration-contract defect; FrontBoard launches a standard tvOS demo bundle registered by the same code path.
+
+### 10.4 Verdict
+
+- The native registration/container/uninstall chain **closed the loop** in this environment and can back the normal install path; production apps and the baseline are untouched.
+- Visual acceptance still needs one screenshot of the demo launching while the TV is on; this does not affect the mechanism-level conclusion.

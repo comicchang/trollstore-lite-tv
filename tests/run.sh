@@ -90,7 +90,11 @@ cat > "$TMP/fakebin/uicache" <<'EOF'
 #!/bin/sh
 exit 0
 EOF
-chmod +x "$TMP/fakebin/id" "$TMP/fakebin/uicache"
+cat > "$TEST_ROOT/usr/libexec/tsltv/tsreg" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$TMP/fakebin/id" "$TMP/fakebin/uicache" "$TEST_ROOT/usr/libexec/tsltv/tsreg"
 printf 'com.example.adopt\t%s\tdeadbeef\t2026-01-01 00:00:00\tadopt\n' \
   "$TMP/apps/adopt" > "$TEST_ROOT/usr/libexec/tsltv/installed.tsv"
 printf 'com.example.install\t%s\tdeadbeef\t2026-01-01 00:00:00\tinstall\n' \
@@ -114,6 +118,42 @@ if [ "$rc" -eq 0 ] && [ ! -e "$TMP/apps/install" ] && \
 else
   bad "本工具安装的应用卸载失败"
   printf '    rc=%s 输出=%s\n' "$rc" "$(cat "$TMP/install.out")"
+fi
+
+# ---------------------------------------------------------------- 4c. tsh 退出码透传
+group "tsh 退出码透传"
+for code in 171 179 180 181 184; do
+  cat > "$TMP/fake-tsltv" <<EOF
+#!/bin/sh
+exit $code
+EOF
+  chmod +x "$TMP/fake-tsltv"
+  TSLTV_BIN="$TMP/fake-tsltv" "$ROOT/src/fork/tsh" install /dev/null >/dev/null 2>&1
+  rc=$?
+  if [ "$rc" -eq "$code" ]; then
+    ok "tsh install 透传 $code"
+  else
+    bad "tsh install 未透传 $code（rc=$rc）"
+  fi
+done
+
+# ---------------------------------------------------------------- 4d. tsreg 构建
+group "tsreg（tvOS 原生注册工具）"
+TSREG_SDK=/Applications/Xcode.app/Contents/Developer/Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS.sdk
+if [ -d "$TSREG_SDK" ] && command -v clang >/dev/null 2>&1; then
+  if clang -target arm64-apple-tvos17.0 -isysroot "$TSREG_SDK" -fobjc-arc -Wall \
+       -framework Foundation "$ROOT/src/tools/tsreg.m" -o "$TMP/tsreg" 2>"$TMP/tsreg.log"; then
+    info=$(cc -O2 -o "$TMP/mc" "$ROOT/src/tools/machocheck.c" 2>/dev/null && "$TMP/mc" "$TMP/tsreg" 2>/dev/null)
+    case "$info" in
+      *platform=3*minos=17.0*cryptid=0*) ok "tsreg 构建通过且为 tvOS 二进制" ;;
+      *) bad "tsreg 元数据异常: $info" ;;
+    esac
+  else
+    bad "tsreg 构建失败"
+    sed 's/^/    /' "$TMP/tsreg.log"
+  fi
+else
+  ok "跳过 tsreg 构建（无 tvOS SDK）"
 fi
 
 # ---------------------------------------------------------------- 5. 预检判定

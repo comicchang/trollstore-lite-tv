@@ -23,4 +23,8 @@ cd "$(dirname "$0")"
 [ -f entfix.m ] && clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -fobjc-arc \
     -framework Foundation entfix.m -o entfix
 
-ls -l machocheck wake modinject machoscan entfix 2>/dev/null || true
+# tsreg: 原生 MCM 容器 + LSApplicationWorkspace 注册 / 注销 / Info.plist 补丁
+[ -f tsreg.m ] && clang -target arm64-apple-tvos17.0 -isysroot "$SDK" -fobjc-arc -Wall \
+    -framework Foundation tsreg.m -o tsreg
+
+ls -l machocheck wake modinject machoscan entfix tsreg 2>/dev/null || true

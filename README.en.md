@@ -177,3 +177,9 @@ Licensing and the scope of what we borrowed: [NOTICE](NOTICE). Porting details:
 - **Disclaimer of warranty & liability (AS-IS)**: Provided "AS IS" without warranty of any kind. Use only on your own devices with software you have the legal right to install, in compliance with applicable laws. Back up before starting; the authors and contributors assume no liability for device damage, data loss, or misuse.
 
 How to report security issues: [SECURITY.md](SECURITY.md).
+
+<!--
+  🛋️ Since you scrolled all the way down here:
+  Sideloading on a TV used to feel like docking a spacecraft; now you just drag and drop.
+  Every great Apple TV tinkering journey ends the same way: back on the couch watching a show.
+-->

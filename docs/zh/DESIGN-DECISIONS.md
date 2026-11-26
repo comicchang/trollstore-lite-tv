@@ -43,7 +43,7 @@ ldid 做 ad-hoc 双哈希签名  →  把该二进制的 sha256 cdhash 写进 Re
       │    tsltv    │  纯 POSIX sh，无 python/jq 依赖
       └────────┬────────┘
                ▼
-   ldid · jbctl trustcache · uicache · /Applications
+   ldid · jbctl trustcache · tsreg · /Applications
 ```
 
 状态文件 `/usr/libexec/tsltv/installed.tsv`：
@@ -73,10 +73,23 @@ ldid 做 ad-hoc 双哈希签名  →  把该二进制的 sha256 cdhash 写进 Re
 | 想法 | 实测结论 |
 |---|---|
 | 移植原版 TrollStore | **不可行**。它整套建立在 CoreTrust（CVE-2023-41991）+ 伪造证书上；该 bypass 在 tvOS 17.0 上伪造成功但 `CS_INVALID_ALLOWED` 永不置位，同 bypass 下带正确 ent 也起不来，纯 adhoc 反而能起 |
-| TrollStore **Lite** | **同样不可行**。它是同一套源码加 `-DTROLLSTORE_LITE` 编译（MIT 许可），只改"默认注册为 User/System"和隐藏设置；核心仍是 CoreTrust，且依赖 tvOS 上不存在的 `MCMAppContainer`。全仓库对信任缓存的引用为 0 |
-| 写入只读系统卷 | **不需要**。`/rootfs` 是 EROFS，但 `uicache` 已能把 app 注册成 `Type: System`，用户视角无差别 |
+| TrollStore **Lite** | **注册/容器 API 可用，CoreTrust 路径不可行**。Lite 与完整版是同一套源码加 `-DTROLLSTORE_LITE` 编译（MIT 许可），核心仍是 CoreTrust；但 `MCMAppContainer`/`MCMAppDataContainer` 与 `LSApplicationWorkspace` 在 tvOS 17.0 实测存在且可用（Stage 2B），现已由 `tsreg` 用于原生注册 |
+| 写入只读系统卷 | **不需要**。`/rootfs` 是 EROFS；`tsreg` 直接调用 `LSApplicationWorkspace` 注册为 `Type: System`，不写系统卷 |
 | 装加密的 App Store 包 | **做不到**。`cryptid 1` 启动即 `Killed: 9`，需要 FairPlay 解密。现在改为**装前就拒绝**并说明原因 |
 | 靠"直接 exec"验证能否运行 | **无效**。UIKit app 脱离 FrontBoard 上下文必死，偶发存活是瞬时假象 |
+
+---
+
+### 4.1 注册与容器（2026-11-26 起）
+
+- 安装/更新走 `tsreg`：MCM 数据 / 插件 / App Group 容器 + `LSApplicationWorkspace` 注册为 System，
+  字典携带 Entitlements、插件表与容器化字段；卸载走 `tsreg unregister`（App Group 容器做引用计数保护）。
+- `tsreg` 为洁净室原创实现（运行时 `dlopen` + `NSClassFromString`，不使用 `-undefined dynamic_lookup`），
+  不复制上游 BSD-4-Clause 的 `uicache.m`，仓库保持纯 MIT。
+- 系统应用判定只认密封卷（`/rootfs/Applications`、`/System/Applications`，含 jbroot 内的
+  `<jbroot>/rootfs/Applications`）与 `installed.tsv`；RootHide 下 `/Applications` 的自装应用绝不当作系统应用。
+- `refresh` / `mods` 只对带 `.tsltv-tsreg` 标记的新装应用走 `tsreg`；旧 `uicache` 应用保持原路径，
+  不迁移容器、不动既有数据。
 
 ---
 

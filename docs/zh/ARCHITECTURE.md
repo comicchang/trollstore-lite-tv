@@ -11,7 +11,7 @@ tvOS 决定一个二进制能否执行，看的是**内核信任缓存里的 cdh
 因此整套方案是三件事：
 
 ```
-ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   →   uicache -p <app>
+ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   →   tsreg register <app>
 ```
 
 ### 三个必要条件（缺一条就静默退出、零日志）
@@ -43,11 +43,12 @@ ldid -S<ent> -Cadhoc -Hsha1 -Hsha256   →   jbctl trustcache add <macho>   → 
         │  root, launchd │
         └────────┬───────┘
                  ▼
-   ldid · jbctl trustcache · uicache · /Applications · installed.tsv
+   ldid · jbctl trustcache · tsreg（MCM 容器 + LaunchServices） · /Applications · installed.tsv
 ```
 
 | 组件 | 语言 | 职责 |
 |---|---|---|
+| `src/tools/tsreg.m` | ObjC | 原生注册：MCM 数据/插件/App Group 容器 + `LSApplicationWorkspace` 注册/注销 + Info.plist 补丁 |
 | `src/cli/tsltv` | POSIX sh | 全部业务逻辑：解包、预检、签名、信任、注册、记账 |
 | `src/daemon/tsltvd` | POSIX sh | 常驻引擎：从 FIFO 收命令、执行、写回结果 |
 | `src/web/main.m` | ObjC | 网页商店（HTTP 服务 + 内置页面） |
@@ -105,13 +106,14 @@ tvOS 上有两条硬限制，把常见做法全堵死了：
      - cryptid != 0  → 拒绝（加密包）
      - platform = 2  → 警告（iOS 包）
      - minos > 17.0  → 警告（系统版本过高）
-4. 复制到 /Applications/<Name>.app，递归清理主包与嵌套 appex/framework 的 SC_Info / _CodeSignature
+4. 复制到 /Applications/<Name>.app，递归清理主包与嵌套 appex/framework 的 SC_Info / _CodeSignature；按上游 applyPatchesToInfoDictionary 打补丁（SBAppUsesLocalNotifications=1、剥离真正系统应用占用的 URL scheme）
 5. 按 bundle 读取原有 entitlements 并归一容器字段（主 app 为空才回落 TROLLTROLL.*，Lite 写 pmap_cs）
 6. 遍历所有 Mach-O（主可执行 + Frameworks + PlugIns + appex）：
      bundle 主可执行用各自 entitlements 覆盖签名；其余二进制 ldid -s 合并式签名（保留原 ent）
      → jbctl trustcache add
-7. 权限对齐（33:33 属主；文件 0644，目录与 Mach-O 0755）→ uicache -p 注册
-8. 写入 installed.tsv
+7. 权限对齐（33:33 属主；文件 0644，目录与 Mach-O 0755）→ tsreg register：
+     MCM 数据容器 + LS 字典（Entitlements / 插件表 / App Group / 容器化字段），默认 System
+8. 写入 installed.tsv，并在 app 内写 `.tsltv-tsreg` 标记（refresh / mods 据此不迁移旧 uicache 应用的容器）
 ```
 
 路径黑名单：`jbctl trustcache add` 会静默拒绝 `/var/containers/Bundle/Application/**`

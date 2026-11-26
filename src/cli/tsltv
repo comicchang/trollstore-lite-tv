@@ -47,6 +47,10 @@ STATE=$BASE/installed.tsv
 WORK=/var/tmp/tsltv.work.$$
 
 die() { printf '错误: %s\n' "$*" >&2; exit 1; }
+# 与上游 RootHelper installApp 对齐的退出码（tsh 原样透传）：
+#   171 目标已存在且不是本工具安装的 / 179 系统应用 Bundle ID / 180 主程序加密 /
+#   181 注册失败 / 184 嵌套二进制加密（非致命）
+die_code() { printf '错误: %s\n' "$2" >&2; exit "$1"; }
 # 调试用：TrollStoreLiteTV_TRACE=1 时把各阶段耗时写到 stderr
 trace() { [ -f /var/tmp/tsltv-trace ] && printf '[trace] %s %s\n' "$(date +%s%3N)" "$*" >&2; return 0; }
 say() { printf '%s\n' "$*"; }
@@ -416,7 +420,7 @@ cmd_mods() { # list | apply <bundle-id> <dylib>
 
       _cd=$(cdhash_of "$_p/$_exe" 2>/dev/null)
       state_add "$_bid" "$_p" "$_cd" "$(state_origin "$_bid")" 2>/dev/null || true
-      uicache -p "$_p" >/dev/null 2>&1 || true
+      reregister_app "$_bid" "$_p" || true
       grep -qxF "$_name" "$_p/.tsltv-mods" 2>/dev/null || echo "$_name" >> "$_p/.tsltv-mods"
       say "完成：$_name 已注入 $_bid（杀掉该应用后重启生效）"
       return 0
@@ -429,6 +433,16 @@ cmd_mods() { # list | apply <bundle-id> <dylib>
       return 1
       ;;
   esac
+}
+
+# 重新注册已装应用：tsreg 新装（带 .tsltv-tsreg 标记）走 tsreg register，旧 uicache 装的应用
+# 继续走 uicache -p。刻意不迁移旧应用的容器，避免既有数据变成孤儿。
+reregister_app() { # <bid> <path>
+  if [ -f "$2/.tsltv-tsreg" ] && [ -x "$BASE/tsreg" ]; then
+    "$BASE/tsreg" register "$2" >/dev/null 2>&1
+  else
+    uicache -p "$2" >/dev/null 2>&1
+  fi
 }
 
 # 重新注册（借鉴 TrollStore RootHelper 的 refresh/refresh-all）
@@ -446,7 +460,7 @@ cmd_refresh() {
   while IFS='	' read -r bid path cd _ts origin; do
     [ -n "$path" ] || continue
     [ -d "$path" ] || continue
-    uicache -p "$path" >/dev/null 2>&1 && _n=$((_n+1))
+    reregister_app "$bid" "$path" && _n=$((_n+1))
   done < "$STATE"
   say "已重新注册 $_n 个应用"
 }
@@ -455,6 +469,10 @@ cmd_refresh() {
 cmd_registration() {
   need_root "$@"
   if [ -n "${1:-}" ]; then
+    if [ -x "$BASE/tsreg" ]; then
+      "$BASE/tsreg" query "$1"
+      return $?
+    fi
     uicache -i "$1" 2>&1 | sed -n '1,12p'
     return 0
   fi
@@ -463,7 +481,11 @@ cmd_registration() {
   printf '%-34s %s\n' BUNDLE_ID TYPE
   while IFS='	' read -r bid path cd _ts origin; do
     [ -n "$bid" ] || continue
-    _t=$(uicache -i "$bid" 2>/dev/null | sed -n 's/.*Type: *//p' | head -1)
+    if [ -x "$BASE/tsreg" ]; then
+      _t=$("$BASE/tsreg" query "$bid" 2>/dev/null | sed -n 's/^type=//p' | head -1)
+    else
+      _t=$(uicache -i "$bid" 2>/dev/null | sed -n 's/.*Type: *//p' | head -1)
+    fi
     printf '%-34s %s\n' "$bid" "${_t:-?}"
   done < "$STATE"
 }
@@ -491,11 +513,12 @@ cmd_inbox_install() {
   for _ipa in "$INBOX"/*.ipa; do
     [ -f "$_ipa" ] || continue
     say "==> $(basename "$_ipa")"
-    if cmd_install "$_ipa"; then
+    cmd_install "$_ipa"; _rc=$?
+    if [ "$_rc" -eq 0 ] || [ "$_rc" -eq 184 ]; then
       rm -f "$_ipa"
       _c=$((_c+1))
     else
-      say "    失败，保留文件以便重试"
+      say "    失败 (rc=$_rc)，保留文件以便重试"
     fi
   done
   [ "$_c" -eq 0 ] && say "投递目录里没有可安装的 ipa"
@@ -722,6 +745,13 @@ cmd_install() {
   exe_name=$(exe_of "$app")
   [ -n "$exe_name" ] || die "读不到 CFBundleExecutable"
 
+  # 上游 installApp 的 179：系统应用的 Bundle ID 一律拒绝（RootHide 下按密封卷清单判定）
+  if [ -x "$BASE/tsreg" ]; then
+    case "$("$BASE/tsreg" classify "$app" 2>/dev/null)" in
+      *system_bid=1*) die_code 179 "Bundle ID 属于系统应用，拒绝安装" ;;
+    esac
+  fi
+
   trace "unpacked"
   # IPA 里通常带 iTunesMetadata.plist，可拿到原始名称/版本（TrollStore 也读这个）
   _imeta=""
@@ -734,16 +764,20 @@ cmd_install() {
     [ -n "$_mname" ] && say "    元数据: ${_mname}${_mver:+ v$_mver}"
   fi
 
-  precheck_app "$app" "$exe_name" || exit 1
+  # 预检失败只有一种硬拒绝：加密包（上游退出码 180）
+  precheck_app "$app" "$exe_name" || exit 180
   trace "precheck-done"
+
+  _nested_enc=0
 
   # 加密的嵌套二进制：上游 Lite 的规则是主程序致命、其余仅告警（安装继续）
   if [ -x "$BASE/machoscan" ]; then
     _enc=$("$BASE/machoscan" -e "$app" 2>/dev/null) || _enc=""
     if printf '%s\n' "$_enc" | grep -Fxq "$app/$exe_name"; then
-      die "主程序是加密的（cryptid≠0），无法安装"
+      die_code 180 "主程序是加密的（cryptid≠0），无法安装"
     fi
     if [ -n "$_enc" ]; then
+      _nested_enc=1
       say "警告: 包内存在加密的嵌套二进制，相关组件安装后可能无法加载："
       printf '%s\n' "$_enc" | head -5 | sed 's/^/    /'
     fi
@@ -753,10 +787,12 @@ cmd_install() {
   # 更新已装应用：沿用记账路径；同名目录若不是本工具安装的则拒绝覆盖
   # （对齐上游 installApp 的 171 护栏：existing app 且无 TrollStore 标记 → 拒绝）
   _prev_path=$(state_path "$bid" 2>/dev/null || true)
+  _was_installed=0
   if [ -n "$_prev_path" ] && [ -d "$_prev_path" ] && [ "$(state_origin "$bid" 2>/dev/null)" = install ]; then
     dest=$_prev_path
+    _was_installed=1
   elif [ -e "$dest" ] || { [ -n "$JB" ] && [ -e "$JB$dest" ]; }; then
-    die "目标已存在且不是本工具安装的：$dest（拒绝覆盖）"
+    die_code 171 "目标已存在且不是本工具安装的：$dest（拒绝覆盖）"
   fi
   say "==> $bid"
   say "    源: $app"
@@ -770,6 +806,12 @@ cmd_install() {
     cp -a "$app" "$dest" || die "复制失败"
   fi
   trace "copied"
+
+  [ -x "$BASE/tsreg" ] || die "缺 tsreg 组件（$BASE/tsreg），请重装 deb"
+  # 对齐上游 installApp · applyPatchesToInfoDictionary：
+  # 打开本地通知，并剥离真正系统应用已占用的 URL scheme
+  "$BASE/tsreg" patch-info "$dest" >/dev/null || die "Info.plist 补丁失败（tsreg patch-info）"
+  trace "patched"
 
   signed=0; trusted=0; failed=0
   # 遍历所有嵌套 Mach-O（主可执行 / Frameworks / PlugIns / appex）
@@ -878,8 +920,21 @@ cmd_install() {
   fi
   trace "permissions-fixed"
 
-  uicache -p "$dest" >/dev/null 2>&1
-  trace "uicached"
+  # ③ 原生容器 + LaunchServices 注册（对齐上游 registerPath：Entitlements / 数据容器 /
+  #    插件表 / App Group；默认 System 类型）。失败则回滚本次安装（181）。
+  if ! "$BASE/tsreg" register "$dest"; then
+    if [ "$_was_installed" -eq 0 ]; then
+      "$BASE/tsreg" unregister "$bid" >/dev/null 2>&1 || true
+    fi
+    rm -rf "$dest"
+    state_del "$bid" 2>/dev/null || true
+    rm -rf "$WORK" 2>/dev/null || true
+    say "==> 注册失败，已回滚本次安装"
+    exit 181
+  fi
+  trace "registered"
+  # 标记：本 app 由 tsreg 注册（refresh / mods 据此选择原生注册路径，不迁移旧 uicache 应用的容器）
+  : > "$dest/.tsltv-tsreg" 2>/dev/null || true
 
   exe="$dest/$exe_name"
   cd=$(cdhash_of "$exe")
@@ -890,6 +945,10 @@ cmd_install() {
   say "==> 完成: $dest"
   say "    cdhash: $cd"
   say "    启动:  uiopen --bundleid $bid"
+  if [ "$_nested_enc" -eq 1 ]; then
+    # 上游对「嵌套二进制加密」返回 184（非致命）；GUI 不检查 rc，tsh 原样透传
+    return 184
+  fi
   return 0
 }
 
@@ -906,10 +965,14 @@ cmd_uninstall() {
   path=$(state_path "$bid")
   say "==> 卸载 $bid"
   say "    $path"
-  uicache -u "$path" >/dev/null 2>&1
+  [ -x "$BASE/tsreg" ] || die "缺 tsreg 组件（$BASE/tsreg），请重装 deb"
+  # 原生注销：删除数据容器 / 插件容器 / 不再被引用的 App Group，再注销 LaunchServices
+  if ! "$BASE/tsreg" unregister "$bid"; then
+    say "警告: tsreg 注销失败，回退 uicache -u"
+    uicache -u "$path" >/dev/null 2>&1 || true
+  fi
   rm -rf "$path"
   state_del "$bid"
-  uicache -s >/dev/null 2>&1
   say "==> 完成"
 }
 

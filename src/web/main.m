@@ -637,7 +637,8 @@ static NSData *HandleRequest(NSString *head, NSData *preBody, int fd) {
         InvalidateProbeCache();
         NSString *summary = [NSString stringWithFormat:@"[上传 %.1f MB / %.1fs (%.1f MB/s) · 安装 %.1fs]\n%@",
                              (double)got / 1048576.0, upSec, ((double)got / 1048576.0) / upSec, instSec, out];
-        return HttpResponse(rc == 0 ? 200 : 500, @"text/plain; charset=utf-8",
+        // 184 = 安装成功，但包内含加密的嵌套二进制（上游非致命码）
+        return HttpResponse((rc == 0 || rc == 184) ? 200 : 500, @"text/plain; charset=utf-8",
                             [summary dataUsingEncoding:NSUTF8StringEncoding]);
     }
     if ([method isEqualToString:@"POST"] && [path isEqualToString:@"/api/uninstall"]) {

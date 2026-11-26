@@ -30,8 +30,8 @@ flowchart TD
     WEB["网页商店 (:8787 + 油猴脚本托管)"] --> API
     CLI["命令行 (tsltv / tsh)"] --> API
 
-    API --> B1["后端 A：越狱信任缓存后端（现网稳定）\nFIFO -> tsltvd -> ldid + jbctl trustcache + uicache"]
-    API --> B2["后端 B：自包含原生后端（待验证）\n独立 Helper 进程 -> 原生容器 API + LSApplicationWorkspace"]
+    API --> B1["后端 A：越狱信任缓存后端（现网稳定）<br/>FIFO -&gt; tsltvd -&gt; ldid + jbctl trustcache + uicache"]
+    API --> B2["后端 B：自包含原生后端（独立仓验证）<br/>独立 Helper 进程 -&gt; 原生容器 API + LSApplicationWorkspace"]
 ```
 
 ### 接口契约（后端无关）
@@ -66,10 +66,10 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    S1["Stage 1\n宿主机侧构建与静态校验\n(零设备接触)"] -->|全部 PASS| S2["Stage 2\n设备端隔离运行态验证\n(不重启 / 零系统改动)"]
-    S2 -->|全部 PASS| S3["Stage 3\n冷重启持久化状态验证\n(正常重启 1 次)"]
+    S1["Stage 1<br/>宿主机侧构建与静态校验<br/>(零设备接触)"] -->|全部 PASS| S2["Stage 2<br/>设备端隔离运行态验证<br/>(不重启 / 零系统改动)"]
+    S2 -->|全部 PASS| S3["Stage 3<br/>冷重启持久化状态验证<br/>(正常重启 1 次)"]
     S1 -->|FAIL| STOP["止损 / 修复构建链"]
-    S2 -->|FAIL| CLEAN["清理测试单元\n维持现网 Lite 方案"]
+    S2 -->|FAIL| CLEAN["清理测试单元<br/>维持现网 Lite 方案"]
     S3 -->|FAIL| CLEAN
     S3 -->|PASS| NEXT["进入完整双后端工程实施"]
 ```
@@ -258,3 +258,44 @@ Stage 1 已实现为可重复执行的宿主机闸门 [`tests/stage1/run.sh`](..
 - 2B 证明“原生容器 + LS System 注册”在当前环境可行；2C 证明“注册成功 ≠ FrontBoard 愿意拉起”，完整原生后端链路尚未闭环。
 - 已知证据缺口：截屏 PNG 未保留；容器/`.app` 的 POSIX 属主未采集；`uicache -p` 的内部注册字段不在本仓库。任何补测（包括单次只读日志采集）都必须重新申报并取得授权。
 - 生产策略不变：继续使用 `TrollStore Lite TV v2.1.6` 的越狱信任缓存后端；Stage 3 冷重启不在本实验范围内。
+
+---
+
+## 10. Stage 2E：注册后端对齐复验（2026-11-26，隔离探针）
+
+> 结论：**原生注册链路在真机闭环通过**（安装 → 容器/注册 → FrontBoard 拉起 → 卸载清理）；未重启、未触碰生产应用与 `installed.tsv`。全程 uptime 连续（本次会话开始时已运行 3h44m，非本实验重启）。
+
+### 10.1 基线
+
+| 字段 | 值 |
+|---|---|
+| 设备 / 系统 | `AppleTV14,1` · tvOS 17.0 (`21J354`) |
+| 生产基线 | `tsltv verify` 7/7 `PASS`；`installed.tsv` sha256 `51f98000c231828894ba313189c6344606f5f781d264a6f3c0ae5e72e2a3677e`（实验前后一致） |
+| 测试单元 | `com.example.tsltv.demo`（`TSLTVDemo.app`）与 `com.tsltv.verify.probe` |
+| 工具 | 仓库版 `tsltv` + `tsreg`（仅测试目录 `/var/tmp/tsltv-verify`，用独立 `installed.tsv`） |
+
+### 10.2 结果
+
+| 子项 | 结论 | 关键证据 |
+|---|---|---|
+| 安装 + 原生注册 | `PASS` | `REGISTER bid=com.example.tsltv.demo ok=1 type=System`；MCM 数据容器创建成功；`tsreg query` 返回 `containerized=1` 与 `data_container=/private/var/mobile/Containers/Data/Application/…` |
+| Info.plist 补丁 | `PASS` | 安装后 `plutil -key SBAppUsesLocalNotifications` → `1` |
+| FrontBoard 拉起 | `PASS` | `uiopen --bundleid com.example.tsltv.demo` 后进程存活：`/…/Applications/TSLTVDemo.app/TSLTVDemo`（pid 3765），无 `.ips` |
+| 卸载清理 | `PASS` | `tsreg unregister` → `ok=1`；LS 记录消失、数据容器删除、app 目录删除、测试 `installed.tsv` 归零 |
+| 171 护栏 | `PASS` | 预置同名非本工具目录后安装 → `rc=171`，未写盘 |
+| 179 系统应用拒绝 | `PASS` | `tsltv install /rootfs/Applications/AppleTV.app` → `rc=179`，未写盘 |
+| 系统应用护栏 | 修复后 `PASS` | 初次判定在 RootHide jbroot 视图下把 `<jbroot>/rootfs/Applications/AppleTV.app` 误判为非系统（`system=0`），负向测试因此重注册了系统 Apple TV（见 10.3）；修复后只读 `tsreg classify` 对同一路径返回 `system_path=1`，自装应用 `/Applications/YouTubeTVL.app` 返回 `system_path=0 managed=1` |
+| 生产回归 | `PASS` | `tsltv verify` 7/7；`installed.tsv` sha256 未变；`/Applications` 无测试残留；测试目录已删除 |
+
+### 10.3 事故与边界（如实记录）
+
+- **系统 App 误注册**：负向测试（期望 rc=3）实际重注册了系统应用 `com.apple.TVWatchList`（Apple TV）。其数据容器为 2022 年既有容器（`854E3CF3…`，含 `com.apple.AppleMediaServices` 等数据），未被删除或重建；应用可正常拉起。新注册为 `Type: System`、`Containerized: true`，与同类系统应用一致；`Removable` 标志为 true（无法确认原值）。未做二次写操作，以免扩大风险。
+- **根因**：RootHide 下 `tsreg` 进程看到的 `/rootfs` 实际映射为 `<jbroot>/rootfs`，旧判定先看 `.jbroot-` 就返回“非系统”。已改为识别 `<jbroot>/rootfs/Applications` 与 `/System/Applications` 路径段，并新增只读 `tsreg classify` 供后续验证。
+- **截屏证据缺口**：电视屏幕当时处于关闭/黑屏（`nonBlackSamples=0`，PNG 全黑），无法提供界面截图；本轮以进程存活 + 注册查询为证据。另发现信任缓存下的 ad-hoc 进程无法写 vroot 绝对路径，`shot` 已改为把 PNG 写 stdout、由 shell 重定向落盘。
+- **残留**：trustcache 280/740，测试 cdhash 均为惰性条目（对应文件已删除），重启后自然清空。
+- **2C 结论修订**：§9.5 的 probe 拉起失败与应用自身元数据有关（缺少 `LSRequiresIPhoneOS` 等），并非注册契约缺陷；使用标准 tvOS demo 包时 FrontBoard 可正常拉起。
+
+### 10.4 判决
+
+- 原生注册/容器/卸载链路在本环境**闭环通过**，可进入日常安装路径；生产应用与基线零改动。
+- 视觉验收仍待电视开启时补拍一次 demo 启动画面；这不影响注册链路的机制结论。
